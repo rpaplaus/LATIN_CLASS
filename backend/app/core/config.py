@@ -28,7 +28,13 @@ class Settings(BaseSettings):
         "insecure-dev-secret-key-change-in-production-use-strong-random-bytes"
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # LLM Settings
+    LLM_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = None
 
     # PostgreSQL
     POSTGRES_SERVER: str = "localhost"
@@ -75,7 +81,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Annotated[list[str], BeforeValidator(parse_cors)] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://localhost:8000",
+        "http://localhost:8001",
     ]
 
 

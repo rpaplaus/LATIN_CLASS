@@ -8,17 +8,13 @@ from fastapi.responses import RedirectResponse
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.database import engine
-from app.core.redis import close_redis_pool, init_redis_pool
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifespan: setup and teardown resources."""
-    # Startup
-    init_redis_pool()
     yield
-    # Shutdown
-    await close_redis_pool()
+    # Teardown
     await engine.dispose()
 
 

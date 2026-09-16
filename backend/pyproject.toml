@@ -22,6 +22,10 @@ dependencies = [
     "bcrypt>=4.0.1,<4.3.0",
     "pyjwt>=2.9.0",
     "python-multipart>=0.0.12",
+    "langchain-core>=0.3.0",
+    "langgraph>=0.2.20",
+    "langchain-google-genai>=2.0.0",
+    "langchain-openai>=0.2.0",
 ]
 
 [project.optional-dependencies]
@@ -90,6 +94,8 @@ plugins = ["pydantic.mypy"]
 module = [
     "asyncpg.*",
     "redis.*",
+    "langchain_google_genai.*",
+    "langchain_openai.*",
 ]
 ignore_missing_imports = true
 

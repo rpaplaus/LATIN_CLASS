@@ -38,7 +38,7 @@ async def test_register_duplicate_email(client: AsyncClient, test_user: User) ->
 
 @pytest.mark.asyncio
 async def test_login_oauth2_success(client: AsyncClient, test_user: User) -> None:
-    """Test logging in via OAuth2 form data returns valid JWT access token."""
+    """Test logging in returns valid access_token, refresh_token and expires_in."""
     login_data = {
         "username": test_user.email,
         "password": "SecretPassword123!",
@@ -47,7 +47,9 @@ async def test_login_oauth2_success(client: AsyncClient, test_user: User) -> Non
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
+    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
+    assert data["expires_in"] > 0
 
 
 @pytest.mark.asyncio
@@ -63,6 +65,64 @@ async def test_login_incorrect_password(client: AsyncClient, test_user: User) ->
 
 
 @pytest.mark.asyncio
+async def test_refresh_token_rotation_success(
+    client: AsyncClient, test_user: User
+) -> None:
+    """Test that refreshing a token rotates the refresh token and invalidates the previous one."""
+    # 1. Login to get initial tokens
+    login_data = {
+        "username": test_user.email,
+        "password": "SecretPassword123!",
+    }
+    login_resp = await client.post("/api/v1/auth/login", data=login_data)
+    assert login_resp.status_code == 200
+    initial_tokens = login_resp.json()
+    old_refresh_token = initial_tokens["refresh_token"]
+
+    # 2. Call /refresh with valid refresh token
+    refresh_resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": old_refresh_token}
+    )
+    assert refresh_resp.status_code == 200
+    new_tokens = refresh_resp.json()
+    assert "access_token" in new_tokens
+    assert "refresh_token" in new_tokens
+    assert new_tokens["refresh_token"] != old_refresh_token
+
+    # 3. Verify Refresh Token Rotation (RTR): Attempting to reuse old_refresh_token must fail
+    reused_resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": old_refresh_token}
+    )
+    assert reused_resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_logout_revokes_refresh_token(
+    client: AsyncClient, test_user: User
+) -> None:
+    """Test that logout invalidates the refresh token in Redis."""
+    # 1. Login
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": test_user.email, "password": "SecretPassword123!"},
+    )
+    assert login_resp.status_code == 200
+    refresh_token = login_resp.json()["refresh_token"]
+
+    # 2. Logout
+    logout_resp = await client.post(
+        "/api/v1/auth/logout", json={"refresh_token": refresh_token}
+    )
+    assert logout_resp.status_code == 200
+
+    # 3. Refresh with the logged-out token must now fail
+    refresh_resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": refresh_token}
+    )
+    assert refresh_resp.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_read_me_unauthorized(client: AsyncClient) -> None:
     """Test accessing /api/v1/auth/me without token returns 401 Unauthorized."""
     response = await client.get("/api/v1/auth/me")
@@ -72,16 +132,13 @@ async def test_read_me_unauthorized(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_read_me_authorized(client: AsyncClient, test_user: User) -> None:
     """Test accessing /api/v1/auth/me with valid Bearer token returns current user profile."""
-    # 1. Login to obtain access token
-    login_data = {
-        "username": test_user.email,
-        "password": "SecretPassword123!",
-    }
-    login_resp = await client.post("/api/v1/auth/login", data=login_data)
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": test_user.email, "password": "SecretPassword123!"},
+    )
     assert login_resp.status_code == 200
     token = login_resp.json()["access_token"]
 
-    # 2. Access /api/v1/auth/me
     headers = {"Authorization": f"Bearer {token}"}
     response = await client.get("/api/v1/auth/me", headers=headers)
     assert response.status_code == 200

@@ -1,0 +1,79 @@
+name: CI Quality & Test Pipeline
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  backend-quality-and-tests:
+    name: Lint, Typecheck & Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: latium_user
+          POSTGRES_PASSWORD: latium_password
+          POSTGRES_DB: latium_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "./backend[dev]"
+
+      - name: Lint with Ruff
+        run: ruff check backend/app backend/tests
+
+      - name: Format Check with Ruff
+        run: ruff format --check backend/app backend/tests
+
+      - name: Strict Type Check with Mypy
+        run: |
+          cd backend
+          mypy app
+
+      - name: Run Alembic Migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://latium_user:latium_password@localhost:5432/latium_db
+        run: |
+          cd backend
+          alembic upgrade head
+
+      - name: Run Pytest Suite
+        env:
+          DATABASE_URL: postgresql+asyncpg://latium_user:latium_password@localhost:5432/latium_db
+          REDIS_URL: redis://localhost:6379/0
+          LLM_PROVIDER: mock
+        run: |
+          cd backend
+          pytest -v
