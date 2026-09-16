@@ -13,6 +13,7 @@ class ModelRole(StrEnum):
     ROUTER = "router"
     TUTOR = "tutor"
     EVALUATOR = "evaluator"
+    ILLUSTRATOR = "illustrator"
 
 
 def get_llm_for_role(role: ModelRole) -> Any | None:
@@ -22,6 +23,7 @@ def get_llm_for_role(role: ModelRole) -> Any | None:
     - ROUTER: Groq (Llama 3.1) -> OpenAI (gpt-4o-mini) -> Gemini (1.5-flash) -> None (local rule-based)
     - TUTOR: Anthropic (Claude 3.5 Sonnet) -> Gemini (1.5-pro) -> OpenAI (gpt-4o-mini) -> None (mock)
     - EVALUATOR: OpenAI (GPT-4o) -> Anthropic (Claude 3.5 Sonnet) -> Gemini (1.5-pro) -> None (mock)
+    - ILLUSTRATOR: OpenAI (gpt-4o-mini) -> Anthropic (Claude 3.5 Sonnet) -> Gemini (1.5-flash) -> None (mock)
     """
     if role == ModelRole.ROUTER:
         if settings.GROQ_API_KEY:
@@ -164,6 +166,35 @@ def get_llm_for_role(role: ModelRole) -> Any | None:
                 logger.warning(
                     "Failed to initialize Gemini fallback for evaluator: %s", exc
                 )
+
+        return None
+
+    if role == ModelRole.ILLUSTRATOR:
+        if settings.OPENAI_API_KEY:
+            try:
+                from langchain_openai import ChatOpenAI
+
+                logger.info("Initializing OpenAI Illustrator LLM (gpt-4o-mini)")
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=settings.OPENAI_API_KEY,
+                    temperature=0.7,
+                )
+            except Exception as exc:
+                logger.warning("Failed to initialize OpenAI illustrator: %s", exc)
+
+        if settings.GEMINI_API_KEY:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+
+                logger.info("Falling back to Gemini Illustrator LLM (gemini-1.5-flash)")
+                return ChatGoogleGenerativeAI(
+                    model="gemini-1.5-flash",
+                    google_api_key=settings.GEMINI_API_KEY,
+                    temperature=0.7,
+                )
+            except Exception as exc:
+                logger.warning("Failed to initialize Gemini illustrator: %s", exc)
 
         return None
 

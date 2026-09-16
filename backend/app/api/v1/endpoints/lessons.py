@@ -216,6 +216,16 @@ async def evaluate_exercise(
             detail="Erro ao processar avaliação com o Censor Latium.",
         )
 
+    if result.score >= 100:
+        from app.services.gamification import evaluate_and_award_badges
+
+        await evaluate_and_award_badges(
+            db=db,
+            user_id=current_user.id,
+            trigger_event="censor_evaluation",
+            context={"score": result.score, "lesson_id": str(lesson_id)},
+        )
+
     return result
 
 
@@ -275,6 +285,16 @@ async def complete_lesson(
     db.add(progress)
     await db.commit()
     await db.refresh(progress)
+
+    # 5. Evaluate and award Roman Senate Badges
+    from app.services.gamification import evaluate_and_award_badges
+
+    await evaluate_and_award_badges(
+        db=db,
+        user_id=current_user.id,
+        trigger_event="complete_lesson",
+        context={"score": completion_in.score, "lesson_id": str(lesson_id)},
+    )
 
     # Reload relationships
     reloaded_progress = await _get_or_create_user_progress(db, current_user.id)

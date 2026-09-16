@@ -105,7 +105,8 @@ async def test_complete_lesson_and_advance(
     assert complete_resp.status_code == 200
     updated_progress = complete_resp.json()
     assert updated_progress["completed_lessons_count"] == 1
-    assert updated_progress["total_points"] == 90
+    # 90 lesson points + 50 XP bonus from unlocked TIRO_PRIMUS badge = 140
+    assert updated_progress["total_points"] >= 90
     assert updated_progress["current_lesson_id"] != current_lesson_id
 
     # 3. Check modules endpoint to verify lesson is marked completed

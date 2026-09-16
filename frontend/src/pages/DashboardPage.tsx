@@ -16,7 +16,9 @@ import {
   Compass,
   ArrowRight,
   GraduationCap,
+  Trophy,
 } from 'lucide-react';
+import { SenateBadgesModal } from '../components/gamification/SenateBadgesModal';
 
 interface DashboardPageProps {
   onOpenClassroom: () => void;
@@ -24,7 +26,15 @@ interface DashboardPageProps {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom }) => {
   const { user } = useAuth();
-  const { progress, modules, startNextLesson, isGeneratingLesson, isLoading } = useProgress();
+  const {
+    progress,
+    modules,
+    startNextLesson,
+    isGeneratingLesson,
+    isLoading,
+    isSenateModalOpen,
+    setIsSenateModalOpen,
+  } = useProgress();
   const [expandedModuleId, setExpandedModuleId] = useState<string | null>(null);
 
   const handleStartLesson = async () => {
@@ -94,6 +104,35 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
         {/* Decorative background Roman Column motif */}
         <div className="absolute right-4 -bottom-6 opacity-10 text-9xl select-none pointer-events-none font-serif">
           🏛️
+        </div>
+      </div>
+
+      {/* Senate Hall / Badges Quick Card */}
+      <div
+        onClick={() => setIsSenateModalOpen(true)}
+        className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-stone-900 via-amber-950/40 to-stone-900 border border-amber-500/40 shadow-lg cursor-pointer hover:border-amber-400 hover:scale-[1.01] transition-all group"
+      >
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 group-hover:scale-110 transition-transform">
+            <Trophy size={24} />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-serif font-bold uppercase tracking-widest text-amber-400">
+                • SENATUS LATIUM •
+              </span>
+            </div>
+            <h4 className="text-base font-serif font-bold text-stone-100">
+              Galeria de Comendas do Senado Romano
+            </h4>
+            <p className="text-xs text-stone-400">
+              Consulte suas insígnias, títulos imperiais e progresso de honrarias
+            </p>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center text-xs font-serif font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+          <span>Abrir Galeria</span>
+          <ArrowRight className="w-4 h-4 ml-1" />
         </div>
       </div>
 
@@ -272,6 +311,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
           </div>
         )}
       </div>
+
+      {/* Senate Badges Modal */}
+      <SenateBadgesModal
+        isOpen={isSenateModalOpen}
+        onClose={() => setIsSenateModalOpen(false)}
+      />
     </div>
   );
 };

@@ -19,7 +19,12 @@ import {
   Check,
   Cpu,
   Feather,
+  Layers,
 } from 'lucide-react';
+import { LatinAudioButton } from '../components/common/LatinAudioButton';
+import { FlashcardModal } from '../components/flashcards/FlashcardModal';
+import { flashcardApi } from '../api/flashcardApi';
+import { FlashcardItem } from '../types/flashcard';
 
 interface ClassroomPageProps {
   onBackToDashboard: () => void;
@@ -38,6 +43,27 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
 
   // Exercise runner states
   const [currentExIndex, setCurrentExIndex] = useState<number>(0);
+
+  // Flashcards states
+  const [isFlashcardsOpen, setIsFlashcardsOpen] = useState<boolean>(false);
+  const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
+  const [isLoadingFlashcards, setIsLoadingFlashcards] = useState<boolean>(false);
+
+  const handleOpenFlashcards = async () => {
+    if (!activeLesson) return;
+    setIsLoadingFlashcards(true);
+    try {
+      if (flashcards.length === 0) {
+        const resp = await flashcardApi.getLessonFlashcards(activeLesson.lesson_id);
+        setFlashcards(resp.flashcards);
+      }
+      setIsFlashcardsOpen(true);
+    } catch (err) {
+      console.error('Erro ao carregar flashcards:', err);
+    } finally {
+      setIsLoadingFlashcards(false);
+    }
+  };
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [textAnswer, setTextAnswer] = useState<string>('');
   const [isAnswerChecked, setIsAnswerChecked] = useState<boolean>(false);
@@ -303,6 +329,33 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
       {/* TAB 2: VOCABULÁRIO & EXEMPLOS */}
       {activeTab === 'vocabulary' && (
         <div className="space-y-6">
+          {/* Flashcards Interactive Launcher */}
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-500/30 gap-3 shadow-sm">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-800 border border-amber-500/30">
+                <Layers size={22} />
+              </div>
+              <div>
+                <h4 className="font-serif font-bold text-amber-950 text-base flex items-center gap-2">
+                  <span>Tabulae Vocabularii (Flashcards 3D)</span>
+                </h4>
+                <p className="text-xs text-stone-600">
+                  Pratique memorização ativa com ilustrações temáticas e pronúncia clássica em áudio.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleOpenFlashcards}
+              isLoading={isLoadingFlashcards}
+              className="border-amber-400 text-amber-950 hover:bg-amber-100 flex-shrink-0 font-medium"
+            >
+              <Sparkles className="w-4 h-4 mr-1.5 text-amber-600" />
+              <span>Abrir Flashcards</span>
+            </Button>
+          </div>
+
           {/* Vocabulary Grid */}
           <div>
             <h3 className="font-serif font-bold text-lg text-slate-900 mb-3">
@@ -316,9 +369,12 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="font-serif font-bold text-lg text-amber-900">
-                        {item.word}
-                      </h4>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-serif font-bold text-lg text-amber-900">
+                          {item.word}
+                        </h4>
+                        <LatinAudioButton text={item.word} size="sm" />
+                      </div>
                       <p className="text-xs text-stone-500 italic font-serif">
                         {item.dictionary_entry}
                       </p>
@@ -332,9 +388,10 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                       {item.translation}
                     </p>
                     {item.example_sentence && (
-                      <p className="text-xs text-stone-500 mt-1 italic">
-                        "{item.example_sentence}"
-                      </p>
+                      <div className="flex items-center justify-between mt-1 text-xs text-stone-500 italic">
+                        <span>"{item.example_sentence}"</span>
+                        <LatinAudioButton text={item.example_sentence} size="sm" />
+                      </div>
                     )}
                   </div>
                 </Card>
@@ -712,6 +769,16 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
             </div>
           )}
         </div>
+      )}
+
+      {/* 3D Flashcards Modal */}
+      {activeLesson && (
+        <FlashcardModal
+          isOpen={isFlashcardsOpen}
+          onClose={() => setIsFlashcardsOpen(false)}
+          flashcards={flashcards}
+          lessonTitle={activeLesson.lesson_title}
+        />
       )}
     </div>
   );

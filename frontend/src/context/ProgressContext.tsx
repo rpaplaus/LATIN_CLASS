@@ -10,6 +10,8 @@ interface ProgressContextType {
   activeLesson: LessonContent | null;
   isLoading: boolean;
   isGeneratingLesson: boolean;
+  isSenateModalOpen: boolean;
+  setIsSenateModalOpen: (open: boolean) => void;
   refreshProgress: () => Promise<void>;
   startNextLesson: () => Promise<LessonContent>;
   completeLesson: (score: number) => Promise<void>;
@@ -27,6 +29,7 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
   const [activeLesson, setActiveLesson] = useState<LessonContent | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isGeneratingLesson, setIsGeneratingLesson] = useState<boolean>(false);
+  const [isSenateModalOpen, setIsSenateModalOpen] = useState<boolean>(false);
 
   const refreshProgress = async () => {
     if (!isAuthenticated) return;
@@ -52,6 +55,7 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
       setProgress(null);
       setModules([]);
       setActiveLesson(null);
+      setIsSenateModalOpen(false);
     }
   }, [isAuthenticated]);
 
@@ -100,6 +104,8 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
         activeLesson,
         isLoading,
         isGeneratingLesson,
+        isSenateModalOpen,
+        setIsSenateModalOpen,
         refreshProgress,
         startNextLesson,
         completeLesson,
