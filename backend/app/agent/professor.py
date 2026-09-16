@@ -165,6 +165,7 @@ async def generate_lesson_for_student(
     lesson_title: str,
     pedagogical_objective: str,
     grammar_topics: list[str],
+    library_context: str | None = None,
 ) -> LessonContent:
     """Generate structured lesson using LangGraph/LangChain or mock provider fallback."""
     from app.agent.llm_factory import ModelRole, get_llm_for_role
@@ -192,6 +193,13 @@ async def generate_lesson_for_student(
             f"Tópicos gramaticais a cobrir: {', '.join(grammar_topics)}\n"
             f"ID da lição: {lesson_id}\n"
         )
+
+        if library_context:
+            user_prompt += (
+                f"\nFragmentos Canônicos da Biblioteca de Alexandria (RAG):\n"
+                f"{library_context}\n"
+                "Incorpore com elegância trechos destes fragmentos autênticos para exemplificar a teoria e os exercícios da aula.\n"
+            )
 
         structured_llm = llm.with_structured_output(LessonContent)
         messages = [

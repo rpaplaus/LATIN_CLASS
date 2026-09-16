@@ -30,6 +30,7 @@ class LatiumWorkflowState(TypedDict, total=False):
     evaluation_response: ExerciseEvaluationResponse
 
     # Tutor specific state
+    library_context: str
     lesson_content: LessonContent
 
 
@@ -48,7 +49,24 @@ def route_decision(state: LatiumWorkflowState) -> str:
 
 
 async def tutor_node(state: LatiumWorkflowState) -> dict[str, Any]:
-    """Tutor Node: Claude 3.5 Sonnet generates the structured Latin lesson."""
+    """Tutor Node: Claude 3.5 Sonnet generates the structured Latin lesson enriched with Alexandria RAG."""
+    from app.agent.tools import search_latin_library
+
+    library_context = ""
+    try:
+        query_text = (
+            f"{state.get('lesson_title', '')} "
+            f"{state.get('pedagogical_objective', '')} "
+            f"{' '.join(state.get('grammar_topics', []))}"
+        )
+        library_context = await search_latin_library.ainvoke(
+            {"query": query_text.strip()}
+        )
+    except Exception as exc:
+        logger.warning(
+            "Alexandria RAG pre-retrieval failed (%s). Continuing without it.", exc
+        )
+
     content = await generate_lesson_for_student(
         lesson_id=state.get("lesson_id", ""),
         student_name=state.get("student_name", "Discipulus"),
@@ -56,8 +74,9 @@ async def tutor_node(state: LatiumWorkflowState) -> dict[str, Any]:
         lesson_title=state.get("lesson_title", "Lição Geral"),
         pedagogical_objective=state.get("pedagogical_objective", "Aprender Latim"),
         grammar_topics=state.get("grammar_topics", []),
+        library_context=library_context or None,
     )
-    return {"lesson_content": content}
+    return {"lesson_content": content, "library_context": library_context}
 
 
 async def evaluator_node(state: LatiumWorkflowState) -> dict[str, Any]:
