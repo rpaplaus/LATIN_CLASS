@@ -77,9 +77,22 @@ def main():
     print(f"   [OK] Vocabulario: {len(lesson['vocabulary'])} itens")
     print(f"   [OK] Exercicios interativos: {len(lesson['exercises'])} gerados")
 
-    print(f"7. Concluindo a licao (/lessons/{lesson['lesson_id']}/complete)...")
+    print(f"7. Avaliando exercicio aberto com o Censor Latium (/lessons/{lesson['lesson_id']}/evaluate)...")
+    eval_resp = post_json(f"/lessons/{lesson['lesson_id']}/evaluate", {
+        "lesson_id": lesson["lesson_id"],
+        "exercise_id": 3,
+        "question": "Traduza: Roma in Italia est.",
+        "expected_answer": "Roma está na Itália.",
+        "student_answer": "Roma está na Itália.",
+        "exercise_type": "translation",
+    }, auth_headers)
+    print(f"   [OK] Veredito do Censor: is_correct={eval_resp['is_correct']}, Nota={eval_resp['score']}/100, Modelo={eval_resp['evaluator_model']}")
+    print(f"   [OK] Parecer: {eval_resp['overall_feedback'][:60]}...")
+    print(f"   [OK] Termos morfologicos analisados: {len(eval_resp['morphological_breakdown'])}")
+
+    print(f"8. Concluindo a licao (/lessons/{lesson['lesson_id']}/complete)...")
     comp = post_json(f"/lessons/{lesson['lesson_id']}/complete", {
-        "score": 100
+        "score": eval_resp["score"]
     }, auth_headers)
     print(f"   [OK] Conclusao registrada! Pontos totais: {comp['total_points']}, Licoes concluidas: {comp['completed_lessons_count']}")
 

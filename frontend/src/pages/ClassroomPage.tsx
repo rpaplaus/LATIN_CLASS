@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useProgress } from '../context/ProgressContext';
+import { lessonApi } from '../api/lessonApi';
+import { ExerciseEvaluationResponse } from '../types/evaluation';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -15,10 +17,19 @@ import {
   Sparkles,
   ArrowRight,
   Check,
+  Cpu,
+  Feather,
 } from 'lucide-react';
 
 interface ClassroomPageProps {
   onBackToDashboard: () => void;
+}
+
+interface AnswerRecord {
+  isCorrect: boolean;
+  answer: string;
+  score: number;
+  evaluation?: ExerciseEvaluationResponse;
 }
 
 export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard }) => {
@@ -30,7 +41,8 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
   const [selectedOption, setSelectedOption] = useState<string>('');
   const [textAnswer, setTextAnswer] = useState<string>('');
   const [isAnswerChecked, setIsAnswerChecked] = useState<boolean>(false);
-  const [userAnswers, setUserAnswers] = useState<Record<number, { isCorrect: boolean; answer: string }>>({});
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+  const [userAnswers, setUserAnswers] = useState<Record<number, AnswerRecord>>({});
   const [isLessonFinished, setIsLessonFinished] = useState<boolean>(false);
 
   if (!activeLesson) {
@@ -55,25 +67,64 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
   const exercises = activeLesson.exercises || [];
   const currentEx = exercises[currentExIndex];
 
-  const handleCheckAnswer = () => {
+  const handleCheckAnswer = async () => {
     if (!currentEx) return;
 
-    let isCorrect = false;
-    const given = currentEx.options ? selectedOption : textAnswer.trim();
-
-    if (currentEx.options) {
-      isCorrect =
+    // 1. Multiple choice question: Instant validation
+    if (currentEx.options && currentEx.options.length > 0) {
+      const isCorrect =
         selectedOption.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
-    } else {
-      isCorrect =
-        textAnswer.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
+      setUserAnswers((prev) => ({
+        ...prev,
+        [currentExIndex]: {
+          isCorrect,
+          answer: selectedOption,
+          score: isCorrect ? 100 : 0,
+        },
+      }));
+      setIsAnswerChecked(true);
+      return;
     }
 
-    setUserAnswers((prev) => ({
-      ...prev,
-      [currentExIndex]: { isCorrect, answer: given },
-    }));
-    setIsAnswerChecked(true);
+    // 2. Open-ended / Translation question: Evaluated via Censor Latium Agent
+    setIsEvaluating(true);
+    try {
+      const evalResult = await lessonApi.evaluateExercise(activeLesson.lesson_id, {
+        lesson_id: activeLesson.lesson_id,
+        exercise_id: currentEx.id,
+        question: currentEx.question,
+        expected_answer: currentEx.correct_answer,
+        student_answer: textAnswer.trim(),
+        exercise_type: currentEx.exercise_type || 'translation',
+      });
+
+      setUserAnswers((prev) => ({
+        ...prev,
+        [currentExIndex]: {
+          isCorrect: evalResult.is_correct,
+          answer: textAnswer.trim(),
+          score: evalResult.score,
+          evaluation: evalResult,
+        },
+      }));
+      setIsAnswerChecked(true);
+    } catch (err) {
+      console.error('Erro na avaliação com Censor Latium:', err);
+      // Fallback comparison
+      const isCorrect =
+        textAnswer.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
+      setUserAnswers((prev) => ({
+        ...prev,
+        [currentExIndex]: {
+          isCorrect,
+          answer: textAnswer.trim(),
+          score: isCorrect ? 100 : 40,
+        },
+      }));
+      setIsAnswerChecked(true);
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const handleNextExercise = () => {
@@ -89,8 +140,11 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
 
   const calculateFinalScore = () => {
     if (exercises.length === 0) return 100;
-    const correctCount = Object.values(userAnswers).filter((a) => a.isCorrect).length;
-    return Math.round((correctCount / exercises.length) * 100);
+    const totalScores = Object.values(userAnswers).reduce(
+      (sum, a) => sum + (a.score ?? (a.isCorrect ? 100 : 0)),
+      0
+    );
+    return Math.round(totalScores / exercises.length);
   };
 
   const handleFinishAndSave = async () => {
@@ -411,9 +465,17 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
               {/* Exercise Question Card */}
               <Card className="p-6 sm:p-8 border-stone-200 space-y-5 shadow-sm">
                 <div>
-                  <Badge variant="neutral" size="sm">
-                    {currentEx.instruction || 'Responda a pergunta'}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="neutral" size="sm">
+                      {currentEx.instruction || 'Responda a pergunta'}
+                    </Badge>
+                    {!currentEx.options && (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        <Cpu className="w-3 h-3 text-amber-600" />
+                        Correção com IA (Censor Latium)
+                      </span>
+                    )}
+                  </div>
                   <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 mt-2">
                     {currentEx.question}
                   </h3>
@@ -469,15 +531,118 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                       type="text"
                       value={textAnswer}
                       onChange={(e) => setTextAnswer(e.target.value)}
-                      disabled={isAnswerChecked}
-                      placeholder="Digite sua resposta em latim..."
+                      disabled={isAnswerChecked || isEvaluating}
+                      placeholder="Digite sua resposta em latim ou português..."
                       className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 text-sm font-serif"
                     />
                   </div>
                 )}
 
-                {/* Explanation feedback after check */}
-                {isAnswerChecked && (
+                {/* Loading spinner while Censor Latium is analyzing */}
+                {isEvaluating && (
+                  <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 text-amber-900 flex items-center gap-3 animate-pulse">
+                    <Feather className="w-5 h-5 text-amber-700 animate-bounce" />
+                    <span className="text-xs font-medium">
+                      O Censor Latium está analisando a morfologia, caso e concordância da sua oração...
+                    </span>
+                  </div>
+                )}
+
+                {/* Rich AI Evaluation Feedback (Phase 4) */}
+                {isAnswerChecked && userAnswers[currentExIndex]?.evaluation && (
+                  <div className="space-y-4 pt-2 animate-fadeIn">
+                    {/* Overall feedback banner */}
+                    <div
+                      className={`p-4 rounded-xl border ${
+                        userAnswers[currentExIndex].evaluation.is_correct
+                          ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                          : 'bg-amber-50 border-amber-300 text-amber-950'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                        <div className="flex items-center gap-2">
+                          {userAnswers[currentExIndex].evaluation.is_correct ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          ) : (
+                            <XCircle className="w-5 h-5 text-amber-600" />
+                          )}
+                          <span className="font-serif font-bold text-sm">
+                            Parecer do Censor Latium ({userAnswers[currentExIndex].evaluation.evaluator_model})
+                          </span>
+                        </div>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/80 border border-stone-200">
+                          Nota: {userAnswers[currentExIndex].evaluation.score}/100
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm leading-relaxed opacity-95">
+                        {userAnswers[currentExIndex].evaluation.overall_feedback}
+                      </p>
+                    </div>
+
+                    {/* Morphological Breakdown Pills */}
+                    {userAnswers[currentExIndex].evaluation.morphological_breakdown.length > 0 && (
+                      <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 space-y-2.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                          <span>🔍 Decomposição Morfológica (Verbum de Verbo)</span>
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {userAnswers[currentExIndex].evaluation.morphological_breakdown.map((token, tIdx) => (
+                            <div
+                              key={tIdx}
+                              className={`p-2.5 rounded-lg border text-xs ${
+                                token.is_correct
+                                  ? 'bg-white border-stone-200'
+                                  : 'bg-red-50/80 border-red-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-serif font-bold text-amber-900">
+                                  {token.token}
+                                </span>
+                                <span className="text-[10px] text-stone-400 italic">
+                                  {token.lemma}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-stone-600 mt-0.5">
+                                {token.part_of_speech} — {token.grammatical_features}
+                              </p>
+                              {token.feedback_note && (
+                                <p className="text-[10px] text-amber-800 mt-1 italic">
+                                  ↳ {token.feedback_note}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Syntax Critique */}
+                    {userAnswers[currentExIndex].evaluation.syntax_critique && (
+                      <div className="p-3.5 rounded-xl bg-[#faf8f4] border border-stone-200 text-xs sm:text-sm text-stone-700 leading-relaxed">
+                        <span className="font-bold text-slate-900">Crítica de Sintaxe: </span>
+                        {userAnswers[currentExIndex].evaluation.syntax_critique}
+                      </div>
+                    )}
+
+                    {/* Suggested Classical Alternatives */}
+                    {userAnswers[currentExIndex].evaluation.suggested_classical_alternatives?.length > 0 && (
+                      <div className="p-3.5 rounded-xl bg-amber-50/50 border border-amber-200/80 text-xs text-amber-950 space-y-1">
+                        <p className="font-bold uppercase tracking-wider text-[10px] text-amber-800">
+                          Variações Clássicas Recomendadas:
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5 font-serif italic text-xs">
+                          {userAnswers[currentExIndex].evaluation.suggested_classical_alternatives.map((alt, aIdx) => (
+                            <li key={aIdx}>{alt}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Multiple choice feedback (when no AI evaluation object) */}
+                {isAnswerChecked && !userAnswers[currentExIndex]?.evaluation && (
                   <div
                     className={`p-4 rounded-xl text-xs sm:text-sm animate-fadeIn ${
                       userAnswers[currentExIndex]?.isCorrect
@@ -512,9 +677,10 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                     <Button
                       variant="primary"
                       onClick={handleCheckAnswer}
-                      disabled={!selectedOption && !textAnswer.trim()}
+                      disabled={(!selectedOption && !textAnswer.trim()) || isEvaluating}
+                      isLoading={isEvaluating}
                     >
-                      Verificar Resposta
+                      {!currentEx.options ? 'Avaliar com Censor Latium' : 'Verificar Resposta'}
                     </Button>
                   ) : (
                     <Button variant="primary" onClick={handleNextExercise}>

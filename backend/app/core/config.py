@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
+    GROQ_API_KEY: str | None = None
+
+    # Model Roles configuration
+    TUTOR_MODEL: str = "claude-3-5-sonnet-20241022"
+    EVALUATOR_MODEL: str = "gpt-4o"
+    ROUTER_MODEL: str = "llama-3.1-70b-versatile"
 
     # PostgreSQL
     POSTGRES_SERVER: str = "localhost"

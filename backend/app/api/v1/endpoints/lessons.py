@@ -6,11 +6,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.agent.graph import latium_graph
 from app.agent.professor import generate_lesson_for_student
 from app.api.deps import get_current_user, get_db
 from app.models.course import CourseModule, Lesson
 from app.models.progress import LessonCompletion, UserProgress
 from app.models.user import User
+from app.schemas.evaluation import (
+    ExerciseEvaluationRequest,
+    ExerciseEvaluationResponse,
+)
 from app.schemas.lesson import (
     CourseModuleResponse,
     LessonCompleteRequest,
@@ -175,6 +180,43 @@ async def generate_next_lesson(
         grammar_topics=lesson.grammar_topics,
     )
     return content
+
+
+@router.post("/{lesson_id}/evaluate", response_model=ExerciseEvaluationResponse)
+async def evaluate_exercise(
+    lesson_id: uuid.UUID,
+    eval_in: ExerciseEvaluationRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Any:
+    """Evaluate student's free-text Latin translation or composition via Censor Latium."""
+    # 1. Verify lesson exists
+    lesson_query = select(Lesson).where(Lesson.id == lesson_id)
+    lesson = (await db.execute(lesson_query)).scalar_one_or_none()
+    if not lesson:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lição não encontrada.",
+        )
+
+    # 2. Invoke LangGraph evaluation workflow
+    student_name = current_user.full_name or current_user.email.split("@")[0].title()
+    workflow_state = await latium_graph.ainvoke(
+        {
+            "action_type": "evaluate_exercise",
+            "lesson_id": str(lesson_id),
+            "student_name": student_name,
+            "evaluation_request": eval_in,
+        }
+    )
+    result = workflow_state.get("evaluation_response")
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao processar avaliação com o Censor Latium.",
+        )
+
+    return result
 
 
 @router.post("/{lesson_id}/complete", response_model=LessonProgressResponse)

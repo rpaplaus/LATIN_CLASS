@@ -1,7 +1,6 @@
 import logging
 from typing import Any, TypedDict
 
-from app.core.config import settings
 from app.schemas.lesson import (
     LatinExample,
     LessonContent,
@@ -168,14 +167,11 @@ async def generate_lesson_for_student(
     grammar_topics: list[str],
 ) -> LessonContent:
     """Generate structured lesson using LangGraph/LangChain or mock provider fallback."""
-    provider = settings.LLM_PROVIDER.lower()
+    from app.agent.llm_factory import ModelRole, get_llm_for_role
 
-    # If mock provider or no API keys configured, return deterministic high quality lesson
-    if (
-        provider == "mock"
-        or (provider == "gemini" and not settings.GEMINI_API_KEY)
-        or (provider == "openai" and not settings.OPENAI_API_KEY)
-    ):
+    llm: Any = get_llm_for_role(ModelRole.TUTOR)
+
+    if llm is None:
         logger.info("Using mock Latin tutor generator for lesson: %s", lesson_title)
         return _generate_mock_lesson(
             lesson_id=lesson_id,
@@ -197,32 +193,13 @@ async def generate_lesson_for_student(
             f"ID da lição: {lesson_id}\n"
         )
 
-        llm: Any = None
-        if provider == "gemini" and settings.GEMINI_API_KEY:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro",
-                google_api_key=settings.GEMINI_API_KEY,
-                temperature=0.3,
-            )
-        elif provider == "openai" and settings.OPENAI_API_KEY:
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(
-                model="gpt-4o-mini",
-                api_key=settings.OPENAI_API_KEY,
-                temperature=0.3,
-            )
-
-        if llm is not None:
-            structured_llm = llm.with_structured_output(LessonContent)
-            messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ]
-            response: LessonContent = await structured_llm.ainvoke(messages)
-            return response
+        structured_llm = llm.with_structured_output(LessonContent)
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+        response: LessonContent = await structured_llm.ainvoke(messages)
+        return response
 
     except Exception as exc:
         logger.warning(

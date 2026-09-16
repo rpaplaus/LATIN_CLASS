@@ -26,6 +26,8 @@ dependencies = [
     "langgraph>=0.2.20",
     "langchain-google-genai>=2.0.0",
     "langchain-openai>=0.2.0",
+    "langchain-anthropic>=0.2.0",
+    "langchain-groq>=0.2.0",
 ]
 
 [project.optional-dependencies]
@@ -96,6 +98,8 @@ module = [
     "redis.*",
     "langchain_google_genai.*",
     "langchain_openai.*",
+    "langchain_anthropic.*",
+    "langchain_groq.*",
 ]
 ignore_missing_imports = true
 

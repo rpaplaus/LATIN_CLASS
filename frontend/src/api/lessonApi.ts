@@ -1,6 +1,10 @@
 import { apiClient } from './client';
 import { CourseModule, UserProgress } from '../types/progress';
 import { LessonContent } from '../types/lesson';
+import {
+  ExerciseEvaluationRequest,
+  ExerciseEvaluationResponse,
+} from '../types/evaluation';
 
 export const lessonApi = {
   getModules: async (): Promise<CourseModule[]> => {
@@ -15,6 +19,17 @@ export const lessonApi = {
 
   generateNextLesson: async (): Promise<LessonContent> => {
     const response = await apiClient.post<LessonContent>('/lessons/next');
+    return response.data;
+  },
+
+  evaluateExercise: async (
+    lessonId: string,
+    payload: ExerciseEvaluationRequest
+  ): Promise<ExerciseEvaluationResponse> => {
+    const response = await apiClient.post<ExerciseEvaluationResponse>(
+      `/lessons/${lessonId}/evaluate`,
+      payload
+    );
     return response.data;
   },
 
