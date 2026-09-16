@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { CourseModule, UserProgress } from '../types/progress';
 import { LessonContent } from '../types/lesson';
 import { lessonApi } from '../api/lessonApi';
@@ -14,15 +14,13 @@ interface ProgressContextType {
   setIsSenateModalOpen: (open: boolean) => void;
   refreshProgress: () => Promise<void>;
   startNextLesson: () => Promise<LessonContent>;
-  completeLesson: (score: number) => Promise<void>;
+  completeLesson: (score?: number) => Promise<void>;
   clearActiveLesson: () => void;
 }
 
 const ProgressContext = createContext<ProgressContextType | undefined>(undefined);
 
-export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
+export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [modules, setModules] = useState<CourseModule[]>([]);
@@ -31,7 +29,7 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isGeneratingLesson, setIsGeneratingLesson] = useState<boolean>(false);
   const [isSenateModalOpen, setIsSenateModalOpen] = useState<boolean>(false);
 
-  const refreshProgress = async () => {
+  const refreshProgress = useCallback(async () => {
     if (!isAuthenticated) return;
     setIsLoading(true);
     try {
@@ -46,7 +44,7 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -57,9 +55,9 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
       setActiveLesson(null);
       setIsSenateModalOpen(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refreshProgress]);
 
-  const startNextLesson = async (): Promise<LessonContent> => {
+  const startNextLesson = useCallback(async (): Promise<LessonContent> => {
     setIsGeneratingLesson(true);
     try {
       const lesson = await lessonApi.generateNextLesson();
@@ -71,9 +69,9 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setIsGeneratingLesson(false);
     }
-  };
+  }, []);
 
-  const completeLesson = async (score: number = 100) => {
+  const completeLesson = useCallback(async (score: number = 100) => {
     if (!activeLesson) return;
     setIsLoading(true);
     try {
@@ -92,26 +90,40 @@ export const ProgressProvider: React.FC<{ children: React.ReactNode }> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeLesson]);
 
-  const clearActiveLesson = () => setActiveLesson(null);
+  const clearActiveLesson = useCallback(() => setActiveLesson(null), []);
+
+  const contextValue = useMemo<ProgressContextType>(
+    () => ({
+      progress,
+      modules,
+      activeLesson,
+      isLoading,
+      isGeneratingLesson,
+      isSenateModalOpen,
+      setIsSenateModalOpen,
+      refreshProgress,
+      startNextLesson,
+      completeLesson,
+      clearActiveLesson,
+    }),
+    [
+      progress,
+      modules,
+      activeLesson,
+      isLoading,
+      isGeneratingLesson,
+      isSenateModalOpen,
+      refreshProgress,
+      startNextLesson,
+      completeLesson,
+      clearActiveLesson,
+    ]
+  );
 
   return (
-    <ProgressContext.Provider
-      value={{
-        progress,
-        modules,
-        activeLesson,
-        isLoading,
-        isGeneratingLesson,
-        isSenateModalOpen,
-        setIsSenateModalOpen,
-        refreshProgress,
-        startNextLesson,
-        completeLesson,
-        clearActiveLesson,
-      }}
-    >
+    <ProgressContext.Provider value={contextValue}>
       {children}
     </ProgressContext.Provider>
   );

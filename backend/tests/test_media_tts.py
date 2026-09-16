@@ -50,7 +50,7 @@ async def test_get_or_create_latin_tts_dual_cache() -> None:
     assert cached1 is False
 
     # Second invocation: should hit disk cache
-    b2, h2, b64_2, cached2 = await get_or_create_latin_tts(text, voice="onyx")
+    b2, h2, b64_2, _cached2 = await get_or_create_latin_tts(text, voice="onyx")
     assert h1 == h2
     assert b1 == b2
     assert b64_1 == b64_2

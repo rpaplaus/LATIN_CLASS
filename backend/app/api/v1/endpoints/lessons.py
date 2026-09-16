@@ -296,26 +296,18 @@ async def complete_lesson(
         context={"score": completion_in.score, "lesson_id": str(lesson_id)},
     )
 
-    # Reload relationships
-    reloaded_progress = await _get_or_create_user_progress(db, current_user.id)
-    mod_title = (
-        reloaded_progress.current_module.title
-        if reloaded_progress.current_module
-        else None
-    )
-    lesson_title = (
-        reloaded_progress.current_lesson.title
-        if reloaded_progress.current_lesson
-        else None
-    )
+    # Refresh relationships efficiently without redundant full-table queries
+    await db.refresh(progress, ["current_module", "current_lesson"])
+    mod_title = progress.current_module.title if progress.current_module else None
+    lesson_title = progress.current_lesson.title if progress.current_lesson else None
 
     return LessonProgressResponse(
-        user_id=reloaded_progress.user_id,
-        current_module_id=reloaded_progress.current_module_id,
-        current_lesson_id=reloaded_progress.current_lesson_id,
+        user_id=progress.user_id,
+        current_module_id=progress.current_module_id,
+        current_lesson_id=progress.current_lesson_id,
         current_module_title=mod_title,
         current_lesson_title=lesson_title,
-        completed_lessons_count=reloaded_progress.completed_lessons_count,
-        total_points=reloaded_progress.total_points,
-        current_streak_days=reloaded_progress.current_streak_days,
+        completed_lessons_count=progress.completed_lessons_count,
+        total_points=progress.total_points,
+        current_streak_days=progress.current_streak_days,
     )

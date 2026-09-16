@@ -19,6 +19,7 @@ import {
   Trophy,
 } from 'lucide-react';
 import { SenateBadgesModal } from '../components/gamification/SenateBadgesModal';
+import { LessonSummary } from '../types/progress';
 
 interface DashboardPageProps {
   onOpenClassroom: () => void;
@@ -203,7 +204,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
             {modules.map((module) => {
               const isExpanded = expandedModuleId === module.id;
               const moduleLessons = module.lessons || [];
-              const moduleCompletedCount = moduleLessons.filter((l) => l.is_completed).length;
+              const moduleCompletedCount = moduleLessons.filter(
+                (l: LessonSummary) => l.is_completed
+              ).length;
               const isAllCompleted =
                 moduleLessons.length > 0 && moduleCompletedCount === moduleLessons.length;
 
@@ -262,7 +265,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
                           Nenhuma lição cadastrada neste módulo ainda.
                         </p>
                       ) : (
-                        moduleLessons.map((lesson) => (
+                        moduleLessons.map((lesson: LessonSummary) => (
                           <div
                             key={lesson.id}
                             className="py-3 px-2 flex items-center justify-between gap-3 hover:bg-stone-100/60 rounded-lg transition-colors"

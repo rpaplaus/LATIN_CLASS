@@ -4,6 +4,7 @@ from httpx import AsyncClient
 from app.agent.illustrator import (
     _generate_classical_roman_svg,
     create_flashcard_for_word,
+    sanitize_svg,
 )
 from app.models.user import User
 
@@ -73,3 +74,21 @@ async def test_lesson_flashcards_api_endpoint(
     assert "translation" in first_card
     assert "image_url" in first_card
     assert "audio_url" in first_card
+
+
+def test_sanitize_svg_defensive() -> None:
+    """Verify sanitize_svg strips malicious scripts and event handlers (SEC-05)."""
+    malicious_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<script>alert("XSS")</script>'
+        '<circle cx="50" cy="50" r="40" onload="alert(1)" onclick="steal()" />'
+        '<a href="javascript:alert(2)"><text>Click</text></a>'
+        "</svg>"
+    )
+    cleaned = sanitize_svg(malicious_svg)
+    assert "<script" not in cleaned
+    assert "alert" not in cleaned
+    assert "onload" not in cleaned
+    assert "onclick" not in cleaned
+    assert "javascript:" not in cleaned
+    assert '<circle cx="50" cy="50" r="40"' in cleaned

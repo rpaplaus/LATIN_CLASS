@@ -11,6 +11,26 @@ from app.models.progress import LessonCompletion, UserProgress
 logger = logging.getLogger(__name__)
 
 
+_canonic_badges_cache: list[Badge] | None = None
+
+
+async def get_canonic_badges(db: AsyncSession) -> list[Badge]:
+    """Retrieve all canonical Roman Senate badges with in-memory caching."""
+    global _canonic_badges_cache
+    if _canonic_badges_cache is None:
+        all_badges_stmt = select(Badge).order_by(Badge.tier, Badge.requirement_value)
+        _canonic_badges_cache = list(
+            (await db.execute(all_badges_stmt)).scalars().all()
+        )
+    return _canonic_badges_cache
+
+
+def invalidate_badges_cache() -> None:
+    """Invalidate canonic badges cache upon administrative updates."""
+    global _canonic_badges_cache
+    _canonic_badges_cache = None
+
+
 async def evaluate_and_award_badges(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -30,9 +50,8 @@ async def evaluate_and_award_badges(
     unlocked_stmt = select(UserBadge.badge_id).where(UserBadge.user_id == user_id)
     unlocked_ids = set((await db.execute(unlocked_stmt)).scalars().all())
 
-    # 3. Fetch all canonic badges
-    all_badges_stmt = select(Badge).order_by(Badge.requirement_value)
-    all_badges = (await db.execute(all_badges_stmt)).scalars().all()
+    # 3. Fetch all canonic badges (Cached)
+    all_badges = await get_canonic_badges(db)
 
     # 4. Check highest score in completions if needed
     has_perfect_score = ctx.get("score", 0) >= 100
@@ -116,9 +135,8 @@ async def get_user_senate_overview(
     lessons_done = progress.completed_lessons_count if progress else 0
     points = progress.total_points if progress else 0
 
-    # 2. Fetch all badges
-    badges_stmt = select(Badge).order_by(Badge.tier, Badge.requirement_value)
-    all_badges = (await db.execute(badges_stmt)).scalars().all()
+    # 2. Fetch all badges from cache
+    all_badges = await get_canonic_badges(db)
 
     # 3. Fetch user's unlocked badges
     user_badges_stmt = select(UserBadge).where(UserBadge.user_id == user_id)

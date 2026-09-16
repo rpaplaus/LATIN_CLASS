@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, PostgresDsn, computed_field
+from pydantic import BeforeValidator, PostgresDsn, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,6 +30,24 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_LOGIN_MAX: int = 10
+    RATE_LIMIT_REGISTER_MAX: int = 5
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        """Halt initialization if production environment is configured with default or weak secret key."""
+        if self.ENVIRONMENT.lower() in ("production", "prod") and (
+            "insecure" in self.SECRET_KEY.lower() or len(self.SECRET_KEY) < 32
+        ):
+            raise ValueError(
+                "CRITICAL SECURITY HAZARD: Running in production environment with an insecure "
+                "or weak SECRET_KEY. Please provide a cryptographically secure key of at least 32 bytes."
+            )
+        return self
 
     # LLM Settings
     LLM_PROVIDER: str = "gemini"

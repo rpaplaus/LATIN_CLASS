@@ -25,6 +25,20 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Verify password asynchronously in a worker thread to prevent event loop blocking."""
+    import asyncio
+
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
+
+
+async def get_password_hash_async(password: str) -> str:
+    """Generate password hash asynchronously in a worker thread to prevent event loop blocking."""
+    import asyncio
+
+    return await asyncio.to_thread(get_password_hash, password)
+
+
 def create_access_token(
     subject: str | Any, expires_delta: timedelta | None = None
 ) -> str:

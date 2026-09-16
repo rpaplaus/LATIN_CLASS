@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.rag import DocumentChunk, LibraryDocument
@@ -19,6 +19,9 @@ async def search_library_chunks(
 ) -> list[dict[str, Any]]:
     """Search Alexandria Latin Library using pgvector cosine distance on DocumentChunk embeddings."""
     query_vector = await get_embedding(query)
+
+    # Optimize HNSW search recall within transaction
+    await db.execute(text("SET LOCAL hnsw.ef_search = 100;"))
 
     stmt = select(DocumentChunk, LibraryDocument).join(
         LibraryDocument, DocumentChunk.document_id == LibraryDocument.id

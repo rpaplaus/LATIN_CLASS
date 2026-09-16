@@ -89,11 +89,18 @@ async def test_refresh_token_rotation_success(
     assert "refresh_token" in new_tokens
     assert new_tokens["refresh_token"] != old_refresh_token
 
-    # 3. Verify Refresh Token Rotation (RTR): Attempting to reuse old_refresh_token must fail
+    # 3. Verify Refresh Token Rotation (RTR): Attempting to reuse old_refresh_token triggers theft detection
     reused_resp = await client.post(
         "/api/v1/auth/refresh", json={"refresh_token": old_refresh_token}
     )
     assert reused_resp.status_code == 401
+    assert "Compromised refresh token reuse detected" in reused_resp.json()["detail"]
+
+    # 4. Verify cascading revocation: Even the newer active refresh token was invalidated for security
+    cascaded_resp = await client.post(
+        "/api/v1/auth/refresh", json={"refresh_token": new_tokens["refresh_token"]}
+    )
+    assert cascaded_resp.status_code == 401
 
 
 @pytest.mark.asyncio

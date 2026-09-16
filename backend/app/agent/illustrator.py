@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,29 @@ def _generate_classical_roman_svg(
     return svg
 
 
+def sanitize_svg(svg_content: str) -> str:
+    """Sanitize SVG markup to prevent stored XSS attacks."""
+    # Strip script tags and content
+    cleaned = re.sub(r"<script[\s\S]*?</script>", "", svg_content, flags=re.IGNORECASE)
+    # Strip foreignObject tags
+    cleaned = re.sub(
+        r"<foreignObject[\s\S]*?</foreignObject>", "", cleaned, flags=re.IGNORECASE
+    )
+    # Strip inline event handlers (onload, onclick, onerror, etc.)
+    cleaned = re.sub(
+        r"\son\w+\s*=\s*[\"'][^\"']*[\"']", "", cleaned, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(r"\son\w+\s*=\s*[^>\s]+", "", cleaned, flags=re.IGNORECASE)
+    # Strip javascript: and vbscript: URIs
+    cleaned = re.sub(
+        r"href\s*=\s*[\"']\s*(javascript|vbscript|data):[^\"']*[\"']",
+        'href="#"',
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned
+
+
 async def create_flashcard_for_word(
     word: str,
     dictionary_entry: str,
@@ -97,7 +121,7 @@ async def create_flashcard_for_word(
 ) -> FlashcardItem:
     """Generate a multimodal Latin flashcard complete with authentic Roman illustration and audio pronunciation."""
     # 1. Generate or retrieve TTS Audio
-    audio_bytes, audio_hash, audio_b64, _ = await get_or_create_latin_tts(
+    _audio_bytes, audio_hash, audio_b64, _ = await get_or_create_latin_tts(
         text=word,
         voice="onyx",
         redis_client=redis_client,
@@ -112,13 +136,19 @@ async def create_flashcard_for_word(
 
     # If image does not exist in storage, generate it
     if not image_path.exists():
-        svg_content = _generate_classical_roman_svg(
-            word=word,
-            translation=translation,
-            grammatical_class=grammatical_class,
-        )
+        import anyio.to_thread
+
+        def _generate_and_save_svg() -> None:
+            svg_content = _generate_classical_roman_svg(
+                word=word,
+                translation=translation,
+                grammatical_class=grammatical_class,
+            )
+            safe_svg = sanitize_svg(svg_content)
+            image_path.write_text(safe_svg, encoding="utf-8")
+
         try:
-            image_path.write_text(svg_content, encoding="utf-8")
+            await anyio.to_thread.run_sync(_generate_and_save_svg)
             logger.info(
                 "Generated classical flashcard artwork for '%s' (%s)", word, image_hash
             )

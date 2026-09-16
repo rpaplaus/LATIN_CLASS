@@ -87,7 +87,9 @@ async def get_or_create_latin_tts(
     # 2. Check Local Disk Cache (Level 2)
     if file_path.exists():
         try:
-            audio_bytes = file_path.read_bytes()
+            import anyio.to_thread
+
+            audio_bytes = await anyio.to_thread.run_sync(file_path.read_bytes)
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             logger.debug(
                 "TTS Cache HIT on Disk for hash %s. Reheating Redis.", audio_hash
@@ -104,6 +106,8 @@ async def get_or_create_latin_tts(
             logger.warning("Failed to read audio from disk (%s): %s", file_path, exc)
 
     # 3. Generate Audio (Level 3 - Provider or Fallback)
+    import anyio.to_thread
+
     generated_bytes: bytes
     if settings.OPENAI_API_KEY:
         try:
@@ -123,14 +127,18 @@ async def get_or_create_latin_tts(
             logger.warning(
                 "OpenAI TTS API failed (%s). Falling back to synthetic audio.", exc
             )
-            generated_bytes = _generate_synthetic_fallback_audio(clean_text)
+            generated_bytes = await anyio.to_thread.run_sync(
+                _generate_synthetic_fallback_audio, clean_text
+            )
     else:
         logger.info("No OpenAI API key. Using deterministic synthetic Latin audio.")
-        generated_bytes = _generate_synthetic_fallback_audio(clean_text)
+        generated_bytes = await anyio.to_thread.run_sync(
+            _generate_synthetic_fallback_audio, clean_text
+        )
 
     # 4. Save to Disk Cache
     try:
-        file_path.write_bytes(generated_bytes)
+        await anyio.to_thread.run_sync(file_path.write_bytes, generated_bytes)
     except Exception as exc:
         logger.warning("Failed to save audio to disk (%s): %s", file_path, exc)
 

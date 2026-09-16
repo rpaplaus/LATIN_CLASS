@@ -59,19 +59,30 @@ exclude = [
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-    "SIM", # flake8-simplify
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "S",     # flake8-bandit (security)
+    "ASYNC", # flake8-async (event loop pitfalls)
+    "T20",   # flake8-print (disallow prints in prod)
+    "ERA",   # eradicate (commented out code)
+    "RUF",   # ruff-specific rules
 ]
 ignore = [
     "E501", # line length handled by formatter
     "B008", # do not perform function calls in argument defaults (FastAPI Depends)
+    "S104", # possible binding to all interfaces (0.0.0.0 in dev)
+    "S105", # possible hardcoded password (triggered by default settings & token schemas)
+    "S106", # possible hardcoded password assigned to argument (e.g. token_type="bearer")
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S107"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

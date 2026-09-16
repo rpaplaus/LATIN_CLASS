@@ -26,7 +26,7 @@ async def health_check(
         if result.scalar() != 1:
             db_status = "unhealthy"
     except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
+        db_status = f"unhealthy: {e!s}"
 
     # Verify Redis connectivity
     try:
@@ -34,7 +34,7 @@ async def health_check(
         if not pong:
             redis_status = "unhealthy"
     except Exception as e:
-        redis_status = f"unhealthy: {str(e)}"
+        redis_status = f"unhealthy: {e!s}"
 
     is_overall_healthy = (db_status == "healthy") and (redis_status == "healthy")
     response_payload = {

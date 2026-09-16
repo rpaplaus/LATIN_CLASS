@@ -84,3 +84,12 @@ async def test_superuser(db_session: AsyncSession) -> User:
     await db_session.commit()
     await db_session.refresh(admin)
     return admin
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_redis_pool() -> AsyncGenerator[None, None]:
+    """Ensure Redis connection pool is cleanly closed when each test completes."""
+    yield
+    from app.core.redis import close_redis_pool
+
+    await close_redis_pool()

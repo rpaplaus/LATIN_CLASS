@@ -88,6 +88,9 @@ apiClient.interceptors.response.use(
         failedQueue.push({ resolve, reject });
       })
         .then((token) => {
+          if (originalRequest.signal?.aborted) {
+            return Promise.reject(new Error('Request was aborted by caller'));
+          }
           originalRequest.headers.Authorization = `Bearer ${token}`;
           return apiClient(originalRequest);
         })
@@ -98,9 +101,15 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-        refresh_token: refreshToken,
-      });
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/refresh`,
+        {
+          refresh_token: refreshToken,
+        },
+        {
+          timeout: 10000,
+        }
+      );
 
       const { access_token, refresh_token: newRefreshToken } = response.data;
       setAccessToken(access_token);
@@ -124,3 +133,13 @@ apiClient.interceptors.response.use(
     }
   }
 );
+
+// Cross-tab synchronization: handle logout in sibling tabs
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event: StorageEvent) => {
+    if (event.key === 'latium_refresh_token' && !event.newValue) {
+      setAccessToken(null);
+      if (onUnauthorizedCallback) onUnauthorizedCallback();
+    }
+  });
+}

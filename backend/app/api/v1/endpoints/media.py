@@ -4,6 +4,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import FileResponse
 
 from app.core.redis import get_redis
 from app.schemas.media import TTSRequest, TTSResponse
@@ -24,7 +25,7 @@ async def generate_latin_tts(
 ) -> Any:
     """Generate or retrieve cached audio pronunciation for Latin text."""
     try:
-        audio_bytes, audio_hash, audio_b64, was_cached = await get_or_create_latin_tts(
+        _audio_bytes, audio_hash, audio_b64, was_cached = await get_or_create_latin_tts(
             text=req.text,
             voice=req.voice,
             redis_client=redis,
@@ -67,12 +68,11 @@ async def get_audio_file(
     except Exception as exc:
         logger.warning("Redis lookup failed in /audio: %s", exc)
 
-    # 2. Try Disk
+    # 2. Try Disk (Non-blocking async streaming via FileResponse)
     file_path = STORAGE_DIR / f"{audio_hash}.mp3"
     if file_path.exists():
-        audio_bytes = file_path.read_bytes()
-        return Response(
-            content=audio_bytes,
+        return FileResponse(
+            path=file_path,
             media_type="audio/mpeg",
             headers={
                 "Cache-Control": "public, max-age=2592000, immutable",
@@ -88,7 +88,7 @@ async def get_audio_file(
 
 @router.get("/images/{filename}")
 async def get_image_file(filename: str) -> Response:
-    """Serve cached Roman classical artwork and flashcard illustration images."""
+    """Serve cached Roman classical artwork and flashcard illustration images via async FileResponse."""
     from app.agent.illustrator import IMAGES_STORAGE_DIR
 
     file_path = IMAGES_STORAGE_DIR / filename
@@ -99,12 +99,17 @@ async def get_image_file(filename: str) -> Response:
         )
 
     content_type = "image/svg+xml" if filename.endswith(".svg") else "image/webp"
-    image_bytes = file_path.read_bytes()
+    headers = {
+        "Cache-Control": "public, max-age=2592000, immutable",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if content_type == "image/svg+xml":
+        headers["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'"
+        )
 
-    return Response(
-        content=image_bytes,
+    return FileResponse(
+        path=file_path,
         media_type=content_type,
-        headers={
-            "Cache-Control": "public, max-age=2592000, immutable",
-        },
+        headers=headers,
     )
