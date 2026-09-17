@@ -19,7 +19,10 @@ class LexiconEntry(BaseModel):
     lesson_id: str = Field(description="ID da lição de onde o vocábulo se originou")
     lesson_title: str = Field(description="Título da lição de origem")
     module_title: str = Field(description="Título do módulo de origem")
-    audio_url: str = Field(description="URL de streaming do áudio MP3 em cache")
+    audio_url: str | None = Field(
+        default=None,
+        description="URL de streaming do áudio MP3 em cache",
+    )
     is_favorite: bool = Field(
         default=False,
         description="Indica se o termo está salvo nos Pugillares (favoritos do aluno)",

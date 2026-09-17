@@ -99,3 +99,46 @@ async def test_media_audio_not_found(client: AsyncClient) -> None:
         "/api/v1/media/audio/0000000000000000000000000000000000000000000000000000000000000000"
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_call_openai_tts_padding_and_validation() -> None:
+    """Verify _call_openai_tts_with_retry applies terminal punctuation padding and validates >= 1KB."""
+    from unittest.mock import AsyncMock, patch
+    from app.services.tts import _call_openai_tts_with_retry
+
+    mock_client = AsyncMock()
+    mock_speech = AsyncMock()
+    mock_client.audio.speech = mock_speech
+
+    # 1. Test padding is applied
+    mock_response = AsyncMock()
+    mock_response.content = b"x" * 2048
+    mock_speech.create.return_value = mock_response
+
+    with patch("openai.AsyncOpenAI", return_value=mock_client), \
+         patch("app.core.config.settings.OPENAI_API_KEY", "mock-key"):
+        result = await _call_openai_tts_with_retry("esse", voice="onyx")
+        assert len(result) == 2048
+        # Verify prompt passed to OpenAI ended with a period
+        _, kwargs = mock_speech.create.call_args
+        assert kwargs["input"] == "esse."
+
+    # 2. Test text that already has punctuation is preserved
+    with patch("openai.AsyncOpenAI", return_value=mock_client), \
+         patch("app.core.config.settings.OPENAI_API_KEY", "mock-key"):
+        await _call_openai_tts_with_retry("quid agis?", voice="onyx")
+        _, kwargs = mock_speech.create.call_args
+        assert kwargs["input"] == "quid agis?"
+
+    # 3. Test that truncated / small response (< 1024 bytes) raises ValueError
+    bad_response = AsyncMock()
+    bad_response.content = b"x" * 500  # < 1KB
+    mock_speech.create.return_value = bad_response
+
+    with patch("openai.AsyncOpenAI", return_value=mock_client), \
+         patch("app.core.config.settings.OPENAI_API_KEY", "mock-key"):
+        with pytest.raises(Exception) as exc_info:
+            await _call_openai_tts_with_retry("ne", voice="onyx", max_retries=1)
+        assert "< 1KB" in str(exc_info.value) or "inferior a 1KB" in str(exc_info.value)
+

@@ -134,7 +134,43 @@ export const LatinAudioButton: React.FC<LatinAudioButtonProps> = ({
       setIsLoading(false);
     };
 
-    audio.onerror = () => {
+    audio.onerror = async () => {
+      // Fallback: If pre-configured audioUrl failed (e.g. 404), dynamically request fresh TTS generation
+      if (!audioBase64 && audioUrl && !hasEndedOrFailed) {
+        try {
+          const ttsData = await mediaApi.getTTSAudio(text);
+          if (ttsData.audio_base64 || ttsData.audio_url) {
+            const mime =
+              ttsData.mime_type ||
+              (ttsData.audio_base64?.startsWith('UklGR') ? 'audio/wav' : 'audio/mpeg');
+            const fallbackSrc = ttsData.audio_base64
+              ? `data:${mime};base64,${ttsData.audio_base64}`
+              : ttsData.audio_url;
+            const fallbackAudio = new Audio(fallbackSrc);
+            audioRef.current = fallbackAudio;
+            fallbackAudio.onplay = () => {
+              setIsLoading(false);
+              setIsPlaying(true);
+            };
+            fallbackAudio.onended = () => {
+              clearTimeout(safetyTimeout);
+              setIsPlaying(false);
+              setIsLoading(false);
+            };
+            fallbackAudio.onerror = () => {
+              clearTimeout(safetyTimeout);
+              setIsPlaying(false);
+              setIsLoading(false);
+              handleError(`Falha ao reproduzir a pronúncia de "${text}".`);
+            };
+            await fallbackAudio.play();
+            return;
+          }
+        } catch {
+          // Fall through to standard error handler
+        }
+      }
+
       hasEndedOrFailed = true;
       clearTimeout(safetyTimeout);
       const mediaErr = audio.error;

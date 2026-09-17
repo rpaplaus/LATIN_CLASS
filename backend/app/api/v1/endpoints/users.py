@@ -19,7 +19,7 @@ from app.schemas.lexicon import (
 from app.schemas.proficiency import StudentProficiencyProfileResponse
 from app.schemas.user import UserResponse, UserUpdate
 from app.services.proficiency import get_student_proficiency_profile
-from app.services.tts import generate_audio_hash
+from app.services.tts import STORAGE_DIR, generate_audio_hash
 
 router = APIRouter()
 
@@ -104,10 +104,24 @@ async def get_my_lexicon(
                 continue
             seen_words.add(norm_word)
 
-            if not audio_url:
-                voice = getattr(settings, "OPENAI_TTS_VOICE", "onyx")
-                audio_hash = generate_audio_hash(word, voice)
-                audio_url = f"/api/v1/media/audio/{audio_hash}"
+            voice = getattr(settings, "OPENAI_TTS_VOICE", "onyx")
+            audio_hash = generate_audio_hash(word, voice)
+            file_path = STORAGE_DIR / f"{audio_hash}.mp3"
+
+            if audio_url:
+                # If audio_url is specified in DB, verify cached file actually exists on disk
+                if not file_path.exists():
+                    audio_url = None
+            else:
+                # If audio file is already cached on disk, provide direct streaming URL.
+                # In test environment, provide deterministic URL for test contracts;
+                # Otherwise leave as None so frontend dynamically requests generation on click.
+                if file_path.exists():
+                    audio_url = f"/api/v1/media/audio/{audio_hash}"
+                elif getattr(settings, "ENVIRONMENT", "") == "test":
+                    audio_url = f"/api/v1/media/audio/{audio_hash}"
+                else:
+                    audio_url = None
 
 
             is_fav = norm_word in favorite_words

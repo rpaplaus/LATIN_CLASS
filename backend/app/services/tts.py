@@ -68,29 +68,40 @@ async def _call_openai_tts_with_retry(
 
     client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=8.0)
     last_exc: Exception | None = None
+
+    # Apply padding on isolated words / text lacking terminal punctuation:
+    # If text does not end with punctuation, append a period to force the model
+    # to generate proper intonation and avoid empty or truncated audio files.
+    prompt_text = clean_text.strip()
+    if not prompt_text.endswith((".", "!", "?", ";", ":", "…")):
+        prompt_text = f"{prompt_text}."
+
     for attempt in range(1, max_retries + 1):
         try:
             logger.debug(
                 "Calling OpenAI TTS (attempt %d/%d) for text: '%s'",
                 attempt,
                 max_retries,
-                clean_text,
+                prompt_text,
             )
             response = await client.audio.speech.create(
                 model="tts-1",
                 voice=voice,
-                input=clean_text,
+                input=prompt_text,
             )
-            if response.content and len(response.content) > 100:
+            if response.content and len(response.content) >= 1024:
                 return response.content
-            raise ValueError("Resposta de áudio vazia ou truncada da OpenAI")
+            content_len = len(response.content) if response.content else 0
+            raise ValueError(
+                f"Resposta de áudio da OpenAI vazia ou truncada ({content_len} bytes < 1KB)"
+            )
         except Exception as exc:
             last_exc = exc
             logger.warning(
                 "OpenAI TTS attempt %d/%d failed for '%s': %s",
                 attempt,
                 max_retries,
-                clean_text,
+                prompt_text,
                 exc,
             )
             if attempt < max_retries:
@@ -187,6 +198,12 @@ async def get_or_create_latin_tts(
         is_synthetic = True
 
     # 4. Save to Disk Cache & Redis Cache (Persist both genuine and synthetic to guarantee valid URLs)
+    # Validate audio buffer size: abort and raise if less than 1KB (1024 bytes) to prevent corrupt cache
+    if len(generated_bytes) < 1024:
+        raise ValueError(
+            f"Buffer de áudio inválido ({len(generated_bytes)} bytes < 1024 bytes). Gravação em cache abortada."
+        )
+
     audio_b64 = base64.b64encode(generated_bytes).decode("ascii")
     try:
         await anyio.to_thread.run_sync(file_path.write_bytes, generated_bytes)
