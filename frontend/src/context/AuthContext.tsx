@@ -39,7 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
+        const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
         const refreshResp = await axios.post(`${apiBaseUrl}/auth/refresh`, {
           refresh_token: storedRefreshToken,
         });

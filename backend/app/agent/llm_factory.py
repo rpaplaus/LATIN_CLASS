@@ -72,12 +72,25 @@ def get_llm_for_role(role: ModelRole) -> Any | None:
         return None
 
     if role == ModelRole.TUTOR:
+        if settings.OPENAI_API_KEY:
+            try:
+                from langchain_openai import ChatOpenAI
+
+                logger.info("Initializing OpenAI Tutor LLM (gpt-4o-mini)")
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=settings.OPENAI_API_KEY,
+                    temperature=0.3,
+                )
+            except Exception as exc:
+                logger.warning("Failed to initialize OpenAI Tutor: %s", exc)
+
         if settings.ANTHROPIC_API_KEY:
             try:
                 from langchain_anthropic import ChatAnthropic
 
                 logger.info(
-                    "Initializing Anthropic Tutor LLM (%s)", settings.TUTOR_MODEL
+                    "Falling back to Anthropic Tutor LLM (%s)", settings.TUTOR_MODEL
                 )
                 return ChatAnthropic(
                     model=settings.TUTOR_MODEL,
@@ -100,21 +113,6 @@ def get_llm_for_role(role: ModelRole) -> Any | None:
             except Exception as exc:
                 logger.warning(
                     "Failed to initialize Gemini fallback for tutor: %s", exc
-                )
-
-        if settings.OPENAI_API_KEY:
-            try:
-                from langchain_openai import ChatOpenAI
-
-                logger.info("Falling back to OpenAI Tutor LLM (gpt-4o-mini)")
-                return ChatOpenAI(
-                    model="gpt-4o-mini",
-                    api_key=settings.OPENAI_API_KEY,
-                    temperature=0.3,
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to initialize OpenAI fallback for tutor: %s", exc
                 )
 
         return None
@@ -199,3 +197,16 @@ def get_llm_for_role(role: ModelRole) -> Any | None:
         return None
 
     return None
+
+
+def get_stt_client() -> Any | None:
+    """Retrieve an initialized AsyncOpenAI client for Speech-to-Text (Whisper)."""
+    if settings.OPENAI_API_KEY:
+        try:
+            from openai import AsyncOpenAI
+
+            return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        except Exception as exc:
+            logger.warning("Failed to initialize OpenAI client for STT: %s", exc)
+    return None
+

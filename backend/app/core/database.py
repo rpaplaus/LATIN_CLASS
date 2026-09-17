@@ -1,14 +1,28 @@
+import os
+import sys
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
+_engine_kwargs: dict[str, Any] = {
+    "echo": settings.DEBUG,
+    "future": True,
+    "pool_pre_ping": True,
+}
+if (
+    "pytest" in sys.modules
+    or os.environ.get("PYTEST_CURRENT_TEST")
+    or settings.ENVIRONMENT == "test"
+):
+    _engine_kwargs["poolclass"] = NullPool
+
 engine = create_async_engine(
     settings.async_database_url,
-    echo=settings.DEBUG,
-    future=True,
-    pool_pre_ping=True,
+    **_engine_kwargs,
 )
 
 async_session_factory = async_sessionmaker(

@@ -1,8 +1,8 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -79,3 +79,66 @@ class LessonCompletion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<LessonCompletion user={self.user_id} lesson={self.lesson_id} score={self.score}>"
+
+
+class StudentTopicProficiency(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Tracks granular student proficiency across individual Latin grammar topics."""
+
+    __tablename__ = "student_topic_proficiency"
+    __table_args__ = (
+        UniqueConstraint("user_id", "topic_key", name="uq_user_topic_proficiency"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    topic_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="morphosyntax"
+    )
+    mastery_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    attempts_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consecutive_successes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    weakness_flags: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    last_evaluated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return (
+            f"<StudentTopicProficiency user={self.user_id} "
+            f"topic={self.topic_key} mastery={self.mastery_score:.2f}>"
+        )
+
+
+class UserVocabularyFavorite(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Stores Latin vocabulary terms favorited by a student in their personal notebook (Pugillares)."""
+
+    __tablename__ = "user_vocabulary_favorites"
+    __table_args__ = (
+        UniqueConstraint("user_id", "word", name="uq_user_vocabulary_favorite"),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    word: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    user: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<UserVocabularyFavorite user={self.user_id} word='{self.word}'>"
+

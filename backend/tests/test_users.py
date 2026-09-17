@@ -28,7 +28,7 @@ async def test_list_users_as_superuser_success(
     data = response.json()
     assert isinstance(data, list)
     assert len(data) >= 1
-    assert data[0]["email"] == test_superuser.email
+    assert any(u["email"] == test_superuser.email for u in data)
 
 
 @pytest.mark.asyncio

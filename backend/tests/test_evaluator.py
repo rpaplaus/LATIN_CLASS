@@ -131,3 +131,47 @@ async def test_evaluator_invalid_lesson_404(
         headers=auth_headers,
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_evaluator_strict_orthography_and_rigor() -> None:
+    """Verify that Censor Latium enforces orthographic rigor and penalizes accent defects."""
+    # Test 1: Exact Latin translation receives perfect score
+    req_exact = ExerciseEvaluationRequest(
+        lesson_id=str(uuid.uuid4()),
+        exercise_id=1,
+        question="A Itália é uma península.",
+        expected_answer="Italia paeninsula est.",
+        student_answer="Italia paeninsula est.",
+        exercise_type="translation",
+    )
+    res_exact: ExerciseEvaluationResponse = await evaluate_student_exercise(req_exact)
+    assert res_exact.is_correct is True
+    assert res_exact.score == 100
+
+    # Test 2: Translation with correct Portuguese accents
+    req_accent_correct = ExerciseEvaluationRequest(
+        lesson_id=str(uuid.uuid4()),
+        exercise_id=2,
+        question="Traduza para o português: Mater filiam amat.",
+        expected_answer="A mãe ama a filha.",
+        student_answer="A mãe ama a filha.",
+        exercise_type="translation",
+    )
+    res_correct: ExerciseEvaluationResponse = await evaluate_student_exercise(req_accent_correct)
+    assert res_correct.is_correct is True
+    assert res_correct.score == 100
+
+    # Test 3: Translation omitting required accents is penalized by the Censor (score < 100)
+    req_accent_missing = ExerciseEvaluationRequest(
+        lesson_id=str(uuid.uuid4()),
+        exercise_id=3,
+        question="Traduza para o português: Mater filiam amat.",
+        expected_answer="A mãe ama a filha.",
+        student_answer="a mae ama a filha",
+        exercise_type="translation",
+    )
+    res_missing: ExerciseEvaluationResponse = await evaluate_student_exercise(req_accent_missing)
+    # The strict Censor detects the imperfection and penalizes score < 100
+    assert res_missing.score < 100
+

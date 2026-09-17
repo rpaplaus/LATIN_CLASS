@@ -15,14 +15,9 @@ _canonic_badges_cache: list[Badge] | None = None
 
 
 async def get_canonic_badges(db: AsyncSession) -> list[Badge]:
-    """Retrieve all canonical Roman Senate badges with in-memory caching."""
-    global _canonic_badges_cache
-    if _canonic_badges_cache is None:
-        all_badges_stmt = select(Badge).order_by(Badge.tier, Badge.requirement_value)
-        _canonic_badges_cache = list(
-            (await db.execute(all_badges_stmt)).scalars().all()
-        )
-    return _canonic_badges_cache
+    """Retrieve all canonical Roman Senate badges attached to the current session."""
+    all_badges_stmt = select(Badge).order_by(Badge.tier, Badge.requirement_value)
+    return list((await db.execute(all_badges_stmt)).scalars().all())
 
 
 def invalidate_badges_cache() -> None:

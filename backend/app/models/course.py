@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import JSON, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -46,6 +46,9 @@ class Lesson(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     pedagogical_objective: Mapped[str] = mapped_column(Text, nullable=False)
     grammar_topics: Mapped[list[Any]] = mapped_column(
         JSON, default=list, nullable=False
+    )
+    content: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True, default=None
     )
 
     module: Mapped["CourseModule"] = relationship(

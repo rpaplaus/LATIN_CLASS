@@ -33,8 +33,13 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """Provide a scoped clean database session for tests with automatic cleanup."""
     async with TestingSessionLocal() as session:
         yield session
-        # Truncate tables to ensure complete test isolation
-        await session.execute(text("TRUNCATE TABLE users CASCADE;"))
+        # Clean up test-specific fixture users only; never truncate the live development database
+        await session.execute(
+            text(
+                "DELETE FROM users WHERE email IN ('student@latium.ai', 'magister@latium.ai', 'cicero@roma.it') "
+                "OR email LIKE 'test_%' OR email LIKE '%@test.com' OR email LIKE '%@test.latium.ai';"
+            )
+        )
         await session.commit()
 
 

@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { Volume2, Loader2, VolumeX } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Volume2, Loader2, AlertCircle } from 'lucide-react';
 import { mediaApi } from '../../api/mediaApi';
+import { useToast } from '../../context/ToastContext';
 
-interface LatinAudioButtonProps {
+export interface LatinAudioButtonProps {
   text: string;
   audioUrl?: string | null;
   audioBase64?: string | null;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   label?: string;
+  onError?: (error: Error | string) => void;
 }
 
 export const LatinAudioButton: React.FC<LatinAudioButtonProps> = ({
@@ -18,55 +20,150 @@ export const LatinAudioButton: React.FC<LatinAudioButtonProps> = ({
   size = 'md',
   className = '',
   label,
+  onError,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hasError, setHasError] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { showToast } = useToast();
+
+  // Cleanup audio playback on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleError = (msg: string, rawError?: unknown) => {
+    console.warn(`[LatinAudioButton] ${msg}`, rawError || '');
+    setIsLoading(false);
+    setIsPlaying(false);
+    setHasError(true);
+    setErrorMessage(msg);
+    if (onError) {
+      onError(rawError instanceof Error ? rawError : msg);
+    }
+    showToast(msg, 'error');
+  };
 
   const handlePlayAudio = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isPlaying || isLoading) return;
 
+    // Reset previous error state
     setHasError(false);
+    setErrorMessage(null);
     setIsLoading(true);
 
-    try {
-      let src: string;
+    let src = '';
 
+    try {
       if (audioBase64) {
-        src = `data:audio/mpeg;base64,${audioBase64}`;
+        const mime = audioBase64.startsWith('UklGR') ? 'audio/wav' : 'audio/mpeg';
+        src = `data:${mime};base64,${audioBase64}`;
       } else if (audioUrl) {
         src = audioUrl;
       } else {
         const ttsData = await mediaApi.getTTSAudio(text);
-        src = ttsData.audio_base64
-          ? `data:audio/mpeg;base64,${ttsData.audio_base64}`
-          : ttsData.audio_url;
+        if (ttsData.audio_base64) {
+          const mime =
+            ttsData.mime_type ||
+            (ttsData.audio_base64.startsWith('UklGR') ? 'audio/wav' : 'audio/mpeg');
+          src = `data:${mime};base64,${ttsData.audio_base64}`;
+        } else if (ttsData.audio_url) {
+          src = ttsData.audio_url;
+        } else {
+          throw new Error('Nenhum dado de áudio retornado pelo servidor.');
+        }
       }
+    } catch (err: any) {
+      const is404 = err?.response?.status === 404;
+      const msg = is404
+        ? `Áudio de "${text}" não encontrado no repositório (404).`
+        : `Falha ao carregar a pronúncia de "${text}". Verifique a conexão.`;
+      handleError(msg, err);
+      return;
+    }
 
-      const audio = new Audio(src);
+    if (!src) {
+      handleError(`Caminho de áudio inválido para "${text}".`);
+      return;
+    }
 
-      audio.onloadeddata = () => {
-        setIsLoading(false);
-        setIsPlaying(true);
-      };
+    // Stop and clean any previously active audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
 
-      audio.onended = () => {
-        setIsPlaying(false);
-      };
+    const audio = new Audio(src);
+    audioRef.current = audio;
 
-      audio.onerror = () => {
-        setIsLoading(false);
-        setIsPlaying(false);
-        setHasError(true);
-      };
+    let hasEndedOrFailed = false;
 
-      await audio.play();
-    } catch (err) {
-      console.warn('Erro ao reproduzir pronúncia em áudio:', err);
+    // Safety timeout: prevent spinning indefinitely if browser stalls
+    const safetyTimeout = setTimeout(() => {
+      if (!hasEndedOrFailed && isLoading) {
+        hasEndedOrFailed = true;
+        audio.pause();
+        handleError(`Tempo limite excedido ao reproduzir a pronúncia de "${text}".`);
+      }
+    }, 9000);
+
+    audio.onplay = () => {
       setIsLoading(false);
+      setIsPlaying(true);
+    };
+
+    audio.onplaying = () => {
+      setIsLoading(false);
+      setIsPlaying(true);
+    };
+
+    audio.onended = () => {
+      hasEndedOrFailed = true;
+      clearTimeout(safetyTimeout);
       setIsPlaying(false);
-      setHasError(true);
+      setIsLoading(false);
+    };
+
+    audio.onerror = () => {
+      hasEndedOrFailed = true;
+      clearTimeout(safetyTimeout);
+      const mediaErr = audio.error;
+      let detail = `Não foi possível reproduzir a pronúncia de "${text}".`;
+      if (mediaErr) {
+        if (mediaErr.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          detail = `Formato de áudio de "${text}" não suportado ou arquivo não encontrado (404).`;
+        } else if (mediaErr.code === MediaError.MEDIA_ERR_NETWORK) {
+          detail = `Erro de conexão ao carregar o áudio de "${text}".`;
+        } else if (mediaErr.code === MediaError.MEDIA_ERR_DECODE) {
+          detail = `Falha na decodificação do áudio de "${text}".`;
+        }
+      }
+      handleError(detail, mediaErr);
+    };
+
+    try {
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+      }
+    } catch (err: any) {
+      hasEndedOrFailed = true;
+      clearTimeout(safetyTimeout);
+      if (err?.name === 'NotAllowedError') {
+        handleError('Reprodução de áudio bloqueada pelas permissões do navegador.', err);
+      } else {
+        handleError(`Falha ao reproduzir o áudio de "${text}".`, err);
+      }
     }
   };
 
@@ -82,17 +179,26 @@ export const LatinAudioButton: React.FC<LatinAudioButtonProps> = ({
     lg: 22,
   };
 
+  const getButtonTitle = () => {
+    if (hasError) {
+      return errorMessage
+        ? `${errorMessage} (Clique para tentar novamente)`
+        : `Erro ao reproduzir pronúncia de "${text}". Clique para tentar novamente.`;
+    }
+    return label || `Ouvir pronúncia clássica de "${text}"`;
+  };
+
   return (
     <button
       type="button"
       onClick={handlePlayAudio}
       disabled={isLoading}
-      title={label || `Ouvir pronúncia clássica de "${text}"`}
+      title={getButtonTitle()}
       className={`inline-flex items-center justify-center rounded-full transition-all duration-200 ${
         isPlaying
           ? 'bg-amber-500 text-stone-900 shadow-md shadow-amber-500/20 scale-105 animate-pulse'
           : hasError
-          ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+          ? 'bg-stone-800/70 hover:bg-stone-700/80 text-stone-400 hover:text-stone-200 border border-stone-600/70 hover:border-amber-500/40 ring-1 ring-stone-600/50'
           : 'bg-stone-800/80 hover:bg-amber-500/20 text-stone-300 hover:text-amber-400 border border-stone-700/60 hover:border-amber-500/40'
       } ${sizeClasses[size]} ${className}`}
       aria-label={label || `Ouvir pronúncia clássica de ${text}`}
@@ -100,11 +206,14 @@ export const LatinAudioButton: React.FC<LatinAudioButtonProps> = ({
       {isLoading ? (
         <Loader2 size={iconSizes[size]} className="animate-spin text-amber-400" />
       ) : hasError ? (
-        <VolumeX size={iconSizes[size]} />
+        <AlertCircle
+          size={iconSizes[size]}
+          className="text-stone-400 hover:text-stone-200 transition-colors"
+        />
       ) : (
         <Volume2
           size={iconSizes[size]}
-          className={isPlaying ? 'animate-bounce' : ''}
+          className={isPlaying ? 'animate-bounce text-stone-900' : ''}
         />
       )}
       {label && <span className="ml-1.5 font-medium">{label}</span>}

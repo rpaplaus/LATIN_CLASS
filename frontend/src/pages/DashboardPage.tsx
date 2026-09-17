@@ -17,15 +17,29 @@ import {
   ArrowRight,
   GraduationCap,
   Trophy,
+  Scroll,
+  Bookmark,
+  Swords,
 } from 'lucide-react';
 import { SenateBadgesModal } from '../components/gamification/SenateBadgesModal';
+import { AdaptiveProficiencyWidget } from '../components/proficiency/AdaptiveProficiencyWidget';
 import { LessonSummary } from '../types/progress';
 
 interface DashboardPageProps {
   onOpenClassroom: () => void;
+  onOpenTabularium?: () => void;
+  onOpenLexicon?: () => void;
+  onOpenArena?: () => void;
+  onReviewLessonId?: (lessonId: string) => void;
 }
 
-export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom }) => {
+export const DashboardPage: React.FC<DashboardPageProps> = ({
+  onOpenClassroom,
+  onOpenTabularium,
+  onOpenLexicon,
+  onOpenArena,
+  onReviewLessonId,
+}) => {
   const { user } = useAuth();
   const {
     progress,
@@ -137,6 +151,102 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
         </div>
       </div>
 
+      {/* Tabularium / Historical Archive Quick Card */}
+      <div
+        onClick={onOpenTabularium}
+        className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-850 to-amber-950/40 border border-amber-700/40 shadow-md cursor-pointer hover:border-amber-500 hover:scale-[1.005] transition-all group"
+      >
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 group-hover:scale-110 transition-transform">
+            <Scroll size={24} />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-serif font-bold uppercase tracking-widest text-amber-400">
+                • TABULARIUM LATIUM •
+              </span>
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                Custo Zero de IA
+              </span>
+            </div>
+            <h4 className="text-base font-serif font-bold text-stone-100">
+              Arquivo Imperial de Lições
+            </h4>
+            <p className="text-xs text-stone-400">
+              Consulte pergaminhos concluídos, vocabulário e gabaritos oficiais sem consumo de tokens
+            </p>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center text-xs font-serif font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+          <span>Acessar Arquivo</span>
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </div>
+      </div>
+
+      {/* Lexicon Universale / Pugillares Quick Card */}
+      <div
+        onClick={onOpenLexicon}
+        className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-850 to-amber-950/40 border border-amber-700/40 shadow-md cursor-pointer hover:border-amber-500 hover:scale-[1.005] transition-all group"
+      >
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 group-hover:scale-110 transition-transform">
+            <Bookmark size={24} />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-serif font-bold uppercase tracking-widest text-amber-400">
+                • LEXICON UNIVERSALE •
+              </span>
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                ⭐ Pugillares
+              </span>
+            </div>
+            <h4 className="text-base font-serif font-bold text-stone-100">
+              Dicionário Global & Tabuinhas de Estudo
+            </h4>
+            <p className="text-xs text-stone-400">
+              Consulte termos assimilados, ouça pronúncias clássicas e revise suas palavras favoritas
+            </p>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center text-xs font-serif font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+          <span>Abrir Lexicon</span>
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </div>
+      </div>
+
+      {/* Arena Latium / Adaptive Flashcards Quick Card */}
+      <div
+        onClick={onOpenArena}
+        className="flex items-center justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-stone-950 via-red-950/40 to-amber-950/30 border border-red-800/40 shadow-md cursor-pointer hover:border-red-500 hover:scale-[1.005] transition-all group"
+      >
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 rounded-xl bg-red-900/30 border border-red-700/50 text-red-300 group-hover:scale-110 transition-transform shadow-inner">
+            <Swords size={24} />
+          </div>
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-serif font-bold uppercase tracking-widest text-red-400">
+                • ARENA LATIUM •
+              </span>
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
+                ⚔️ Combate Adaptativo
+              </span>
+            </div>
+            <h4 className="text-base font-serif font-bold text-stone-100">
+              Desafio Rápido de Fraquezas (EMA)
+            </h4>
+            <p className="text-xs text-stone-400">
+              Enfrente 3 flashcards focados no seu tópico mais vulnerável com avaliação instantânea
+            </p>
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center text-xs font-serif font-bold text-red-400 group-hover:translate-x-1 transition-transform">
+          <span>Entrar na Arena</span>
+          <ArrowRight className="w-4 h-4 ml-1" />
+        </div>
+      </div>
+
       {/* Main Next Lesson CTA Card */}
       <Card className="p-6 border-amber-200/80 bg-gradient-to-br from-white via-amber-50/20 to-orange-50/30 shadow-md hover:shadow-lg transition-all">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -179,6 +289,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
           />
         </div>
       </Card>
+
+      {/* Adaptive Proficiency & Student Adaptation Diagnostic */}
+      <AdaptiveProficiencyWidget />
 
       {/* Syllabus / Modules Overview */}
       <div className="space-y-3">
@@ -294,9 +407,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onOpenClassroom })
 
                             <div className="flex items-center gap-2">
                               {lesson.is_completed ? (
-                                <Badge variant="success" size="sm">
-                                  Concluída
-                                </Badge>
+                                <>
+                                  <Badge variant="success" size="sm">
+                                    Concluída
+                                  </Badge>
+                                  {onReviewLessonId && (
+                                    <button
+                                      onClick={() => onReviewLessonId(lesson.id)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 hover:text-amber-950 bg-amber-100/70 hover:bg-amber-200/80 border border-amber-300/80 px-2 py-0.5 rounded-md transition-all shadow-2xs"
+                                      title="Revisar no Tabularium (Custo Zero de IA)"
+                                    >
+                                      <Scroll className="w-3 h-3 text-amber-700" />
+                                      <span>Revisar</span>
+                                    </button>
+                                  )}
+                                </>
                               ) : (
                                 <Badge variant="neutral" size="sm">
                                   Pendente

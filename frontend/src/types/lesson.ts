@@ -28,6 +28,16 @@ export interface TheorySection {
   rule_summary: string;
 }
 
+export interface HistoricalTrivia {
+  title: string;
+  fact?: string;
+  content?: string;
+  text?: string;
+  century_or_period?: string;
+  latin_motto_or_phrase?: string;
+  source_reference?: string | null;
+}
+
 export interface LessonContent {
   lesson_id: string;
   module_title: string;
@@ -39,4 +49,5 @@ export interface LessonContent {
   vocabulary: VocabularyItem[];
   exercises: LessonExercise[];
   teacher_tip: string;
+  historical_trivia?: HistoricalTrivia[] | null;
 }

@@ -2,6 +2,14 @@ import React, { Suspense, useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ProgressProvider, useProgress } from './context/ProgressContext';
 import { AppShell } from './components/layout/AppShell';
+import { MagisterChatDrawer } from './components/chat/MagisterChatDrawer';
+import { FloatingMagisterButton } from './components/chat/FloatingMagisterButton';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+
+import { ToastProvider } from './context/ToastContext';
+
+import { LessonContent } from './types/lesson';
+import { lessonApi } from './api/lessonApi';
 
 // Code-splitting via React.lazy for optimized bundle size
 const LoginPage = React.lazy(() =>
@@ -13,11 +21,22 @@ const DashboardPage = React.lazy(() =>
 const ClassroomPage = React.lazy(() =>
   import('./pages/ClassroomPage').then((m) => ({ default: m.ClassroomPage }))
 );
+const TabulariumPage = React.lazy(() =>
+  import('./pages/TabulariumPage').then((m) => ({ default: m.TabulariumPage }))
+);
+const LexiconPage = React.lazy(() =>
+  import('./pages/LexiconPage').then((m) => ({ default: m.LexiconPage }))
+);
+const ArenaPage = React.lazy(() =>
+  import('./pages/ArenaPage').then((m) => ({ default: m.ArenaPage }))
+);
 const ProfilePage = React.lazy(() =>
   import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))
 );
 
-type MainTab = 'dashboard' | 'syllabus' | 'profile';
+type MainTab = 'dashboard' | 'syllabus' | 'tabularium' | 'lexicon' | 'arena' | 'profile';
+
+
 
 const PageFallback: React.FC = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 min-h-[300px]">
@@ -35,6 +54,8 @@ const MainApp: React.FC = () => {
   const { activeLesson, clearActiveLesson } = useProgress();
   const [currentTab, setCurrentTab] = useState<MainTab>('dashboard');
   const [isClassroomOpen, setIsClassroomOpen] = useState<boolean>(false);
+  const [reviewLesson, setReviewLesson] = useState<LessonContent | null>(null);
+  const [isGlobalChatOpen, setIsGlobalChatOpen] = useState<boolean>(false);
 
   // Splash / Loading Screen during session restoration
   if (authLoading) {
@@ -61,6 +82,35 @@ const MainApp: React.FC = () => {
       <Suspense fallback={<PageFallback />}>
         <LoginPage />
       </Suspense>
+    );
+  }
+
+  // Historical Revision Mode (Tabularium Read-Only)
+  if (reviewLesson) {
+    return (
+      <AppShell
+        currentTab={currentTab}
+        onSelectTab={(tab) => {
+          setReviewLesson(null);
+          setCurrentTab(tab);
+        }}
+        hideNav={true}
+      >
+        <Suspense fallback={<PageFallback />}>
+          <ClassroomPage
+            isReadOnly={true}
+            reviewLesson={reviewLesson}
+            onBackToDashboard={() => {
+              setReviewLesson(null);
+              setCurrentTab('tabularium');
+            }}
+            onBackToTabularium={() => {
+              setReviewLesson(null);
+              setCurrentTab('tabularium');
+            }}
+          />
+        </Suspense>
+      </AppShell>
     );
   }
 
@@ -92,24 +142,83 @@ const MainApp: React.FC = () => {
     <AppShell currentTab={currentTab} onSelectTab={setCurrentTab}>
       <Suspense fallback={<PageFallback />}>
         {currentTab === 'dashboard' && (
-          <DashboardPage onOpenClassroom={() => setIsClassroomOpen(true)} />
+          <DashboardPage
+            onOpenClassroom={() => setIsClassroomOpen(true)}
+            onOpenTabularium={() => setCurrentTab('tabularium')}
+            onOpenLexicon={() => setCurrentTab('lexicon')}
+            onOpenArena={() => setCurrentTab('arena')}
+            onReviewLessonId={async (id) => {
+              try {
+                const lesson = await lessonApi.getLessonById(id);
+                setReviewLesson(lesson);
+              } catch (err) {
+                console.error('Erro ao abrir aula histórica:', err);
+              }
+            }}
+          />
         )}
         {currentTab === 'syllabus' && (
-          <DashboardPage onOpenClassroom={() => setIsClassroomOpen(true)} />
+          <DashboardPage
+            onOpenClassroom={() => setIsClassroomOpen(true)}
+            onOpenTabularium={() => setCurrentTab('tabularium')}
+            onOpenLexicon={() => setCurrentTab('lexicon')}
+            onOpenArena={() => setCurrentTab('arena')}
+            onReviewLessonId={async (id) => {
+              try {
+                const lesson = await lessonApi.getLessonById(id);
+                setReviewLesson(lesson);
+              } catch (err) {
+                console.error('Erro ao abrir aula histórica:', err);
+              }
+            }}
+          />
+        )}
+        {currentTab === 'tabularium' && (
+          <TabulariumPage
+            onReviewLesson={(lesson) => setReviewLesson(lesson)}
+            onBackToDashboard={() => setCurrentTab('dashboard')}
+          />
+        )}
+        {currentTab === 'lexicon' && (
+          <LexiconPage
+            onBackToDashboard={() => setCurrentTab('dashboard')}
+            onNavigateToTabularium={() => setCurrentTab('tabularium')}
+          />
+        )}
+        {currentTab === 'arena' && (
+          <ArenaPage
+            onBackToDashboard={() => setCurrentTab('dashboard')}
+            onNavigateToTabularium={() => setCurrentTab('tabularium')}
+          />
         )}
         {currentTab === 'profile' && <ProfilePage />}
+
       </Suspense>
+
+      {/* Global Magister Chat Drawer & Button */}
+      <MagisterChatDrawer
+        isOpen={isGlobalChatOpen}
+        onClose={() => setIsGlobalChatOpen(false)}
+      />
+      <FloatingMagisterButton
+        isOpen={isGlobalChatOpen}
+        onClick={() => setIsGlobalChatOpen(true)}
+      />
     </AppShell>
   );
 };
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ProgressProvider>
-        <MainApp />
-      </ProgressProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <ProgressProvider>
+            <MainApp />
+          </ProgressProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 };
 

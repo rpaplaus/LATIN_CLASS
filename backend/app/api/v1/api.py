@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    arena,
     auth,
     badges,
+    chat,
     flashcards,
     health,
     lessons,
@@ -24,3 +26,10 @@ api_router.include_router(
 api_router.include_router(
     badges.router, prefix="/badges", tags=["Roman Senate & Gamification"]
 )
+api_router.include_router(
+    chat.router, prefix="/chat", tags=["Interactive Magister Chat & Web Search"]
+)
+api_router.include_router(
+    arena.router, prefix="/arena", tags=["Arena Latium & Adaptive Flashcards"]
+)
+

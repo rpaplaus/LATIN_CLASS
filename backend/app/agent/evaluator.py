@@ -11,14 +11,13 @@ from app.schemas.evaluation import (
 
 logger = logging.getLogger(__name__)
 
-CENSOR_SYSTEM_PROMPT = """Você é o Censor Latium, um erudito filólogo e gramático clássico encarregado de corrigir e guiar alunos de Língua Latina.
-Sua missão é avaliar a resposta do estudante com rigor gramatical filológico e tom humanista socrático.
+CENSOR_SYSTEM_PROMPT = """Você é o Censor Latium, um avaliador implacável e rigoroso. Exija precisão ortográfica absoluta na resposta do aluno, incluindo o uso correto de acentos (ex: 'está' vs 'esta'). Penalize erros gramaticais e de pontuação, explicando a falha para garantir o aprendizado.
 
 Diretrizes obrigatórias de avaliação:
 1. Decomposição Morfológica: Decomponha cada palavra relevante da resposta do aluno, fornecendo seu lema canônico de dicionário, classe de palavra, caso, gênero, número (ou tempo/modo/pessoa para verbos), e aponte eventuais desvios de desinência.
 2. Crítica Sintática: Comente sobre concordância de casos (sujeito no nominativo, objeto no acusativo, concordância do adjetivo com o substantivo) e a ordem das palavras clássica (tendência SOV clássica vs SVO).
 3. Alternativas Clássicas: Sugira frases equivalentes elegantes atestadas em autores clássicos como Cícero, César ou Tito Lívio.
-4. Pontuação e Parecer: Atribua uma nota de 0 a 100 justa e pedagógica, acompanhada de um parecer construtivo e encorajador.
+4. Pontuação e Parecer: Atribua uma nota de 0 a 100 com base no rigor filológico. Penalize desvios de acentuação, ortografia, pontuação ou concordância, detalhando cada falha encontrada para garantir o aprendizado.
 """
 
 
@@ -26,15 +25,16 @@ def _mock_evaluate_student_exercise(
     request: ExerciseEvaluationRequest,
 ) -> ExerciseEvaluationResponse:
     """Generate deterministic, pedagogically rich evaluation for offline tests and local development."""
-    student_clean = request.student_answer.strip().lower()
-    expected_clean = request.expected_answer.strip().lower()
+    student_clean = request.student_answer.strip().rstrip(".")
+    expected_clean = request.expected_answer.strip().rstrip(".")
 
-    # Normalize punctuation
+    # Normalize punctuation and extract words
     student_words = [w for w in re.findall(r"\b\w+\b", request.student_answer) if w]
 
-    is_exact_match = student_clean == expected_clean
+    # Strict match: requires matching characters (including exact accents)
+    is_exact_match = student_clean.lower() == expected_clean.lower()
     is_close = (
-        any(word.lower() in expected_clean for word in student_words)
+        any(word.lower() in expected_clean.lower() for word in student_words)
         if student_words
         else False
     )
@@ -194,7 +194,10 @@ async def evaluate_student_exercise(
             f"Pergunta / Enunciado: {request.question}\n"
             f"Resposta Canônica Esperada: {request.expected_answer}\n"
             f"Resposta Submetida pelo Aluno: {request.student_answer}\n\n"
-            "Avalie detalhadamente a resposta do aluno com rigor morfológico, crítica sintática e nota."
+            "Avalie detalhadamente a resposta do aluno com rigor morfológico, crítica sintática e nota. "
+            "Diretriz estrita: Você é o Censor Latium, um avaliador implacável e rigoroso. "
+            "Exija precisão ortográfica absoluta na resposta do aluno, incluindo o uso correto de acentos "
+            "(ex: 'está' vs 'esta'). Penalize erros gramaticais e de pontuação, explicando a falha para garantir o aprendizado."
         )
 
         messages = [

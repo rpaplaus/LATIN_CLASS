@@ -42,7 +42,8 @@ def test_synthetic_fallback_audio_valid_wav() -> None:
 @pytest.mark.asyncio
 async def test_get_or_create_latin_tts_dual_cache() -> None:
     """Verify get_or_create_latin_tts generates audio and returns cached on second call."""
-    text = "Senatus Populusque Romanus"
+    import uuid
+    text = f"Senatus Populusque Romanus {uuid.uuid4().hex[:8]}"
     # First invocation: generates and writes to disk
     b1, h1, b64_1, cached1 = await get_or_create_latin_tts(text, voice="onyx")
     assert len(b1) > 0
@@ -50,10 +51,11 @@ async def test_get_or_create_latin_tts_dual_cache() -> None:
     assert cached1 is False
 
     # Second invocation: should hit disk cache
-    b2, h2, b64_2, _cached2 = await get_or_create_latin_tts(text, voice="onyx")
+    b2, h2, b64_2, cached2 = await get_or_create_latin_tts(text, voice="onyx")
     assert h1 == h2
     assert b1 == b2
     assert b64_1 == b64_2
+    assert cached2 is True
 
 
 @pytest.mark.asyncio

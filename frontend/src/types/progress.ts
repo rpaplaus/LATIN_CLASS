@@ -27,3 +27,16 @@ export interface UserProgress {
   total_points: number;
   current_streak_days: number;
 }
+
+export interface CompletedLessonSummary {
+  id: string;
+  completion_id: string;
+  order_index: number;
+  title: string;
+  module_id: string;
+  module_title: string;
+  score: number;
+  completed_at: string;
+  pedagogical_objective: string;
+  grammar_topics: string[];
+}

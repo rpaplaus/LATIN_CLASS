@@ -3,11 +3,25 @@ import logging
 from typing import Any
 
 import redis.asyncio as aioredis
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 
 from app.core.redis import get_redis
-from app.schemas.media import TTSRequest, TTSResponse
+from app.schemas.media import (
+    PronunciationEvaluationResponse,
+    TTSRequest,
+    TTSResponse,
+)
+from app.services.stt import evaluate_latin_pronunciation
 from app.services.tts import (
     STORAGE_DIR,
     get_or_create_latin_tts,
@@ -25,11 +39,12 @@ async def generate_latin_tts(
 ) -> Any:
     """Generate or retrieve cached audio pronunciation for Latin text."""
     try:
-        _audio_bytes, audio_hash, audio_b64, was_cached = await get_or_create_latin_tts(
+        audio_bytes, audio_hash, audio_b64, was_cached = await get_or_create_latin_tts(
             text=req.text,
             voice=req.voice,
             redis_client=redis,
         )
+        mime_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
         return TTSResponse(
             audio_hash=audio_hash,
             audio_url=f"/api/v1/media/audio/{audio_hash}",
@@ -37,12 +52,44 @@ async def generate_latin_tts(
             cached=was_cached,
             text=req.text.strip(),
             voice=req.voice,
+            mime_type=mime_type,
         )
     except Exception as exc:
         logger.error("Failed to generate Latin audio: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro ao sintetizar áudio latino: {exc}",
+        ) from exc
+
+
+@router.post("/stt/evaluate", response_model=PronunciationEvaluationResponse)
+async def evaluate_speech_pronunciation(
+    audio_file: UploadFile = File(...),
+    target_text: str = Form(...),
+) -> Any:
+    """Evaluate student spoken Latin audio against target classical phrase."""
+    try:
+        audio_bytes = await audio_file.read()
+        if len(audio_bytes) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Arquivo de áudio vazio. Grave sua pronúncia novamente.",
+            )
+
+        filename = audio_file.filename or "recording.wav"
+        result = await evaluate_latin_pronunciation(
+            audio_bytes=audio_bytes,
+            target_text=target_text,
+            filename=filename,
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to evaluate Latin speech pronunciation: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao avaliar pronúncia clássica: {exc}",
         ) from exc
 
 
@@ -57,9 +104,10 @@ async def get_audio_file(
         cached_b64 = await redis.get(f"latin_tts:audio:{audio_hash}")
         if cached_b64:
             audio_bytes = base64.b64decode(cached_b64)
+            media_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
             return Response(
                 content=audio_bytes,
-                media_type="audio/mpeg",
+                media_type=media_type,
                 headers={
                     "Cache-Control": "public, max-age=2592000, immutable",
                     "Accept-Ranges": "bytes",
@@ -71,9 +119,19 @@ async def get_audio_file(
     # 2. Try Disk (Non-blocking async streaming via FileResponse)
     file_path = STORAGE_DIR / f"{audio_hash}.mp3"
     if file_path.exists():
+        import anyio.to_thread
+
+        try:
+            header = await anyio.to_thread.run_sync(
+                lambda: file_path.read_bytes()[:4]
+            )
+            media_type = "audio/wav" if header.startswith(b"RIFF") else "audio/mpeg"
+        except Exception:
+            media_type = "audio/mpeg"
+
         return FileResponse(
             path=file_path,
-            media_type="audio/mpeg",
+            media_type=media_type,
             headers={
                 "Cache-Control": "public, max-age=2592000, immutable",
                 "Accept-Ranges": "bytes",

@@ -58,6 +58,46 @@ def _generate_synthetic_fallback_audio(text: str) -> bytes:
     return buf.getvalue()
 
 
+async def _call_openai_tts_with_retry(
+    clean_text: str, voice: str, max_retries: int = 2
+) -> bytes:
+    """Call OpenAI TTS API with timeout and retry logic."""
+    import asyncio
+
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=8.0)
+    last_exc: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.debug(
+                "Calling OpenAI TTS (attempt %d/%d) for text: '%s'",
+                attempt,
+                max_retries,
+                clean_text,
+            )
+            response = await client.audio.speech.create(
+                model="tts-1",
+                voice=voice,
+                input=clean_text,
+            )
+            if response.content and len(response.content) > 100:
+                return response.content
+            raise ValueError("Resposta de áudio vazia ou truncada da OpenAI")
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "OpenAI TTS attempt %d/%d failed for '%s': %s",
+                attempt,
+                max_retries,
+                clean_text,
+                exc,
+            )
+            if attempt < max_retries:
+                await asyncio.sleep(0.5 * attempt)
+    raise last_exc or RuntimeError("OpenAI TTS falhou em todas as tentativas")
+
+
 async def get_or_create_latin_tts(
     text: str,
     voice: str = "onyx",
@@ -69,9 +109,13 @@ async def get_or_create_latin_tts(
         (audio_bytes, audio_hash, audio_base64, was_cached)
     """
     clean_text = text.strip()
+    if not clean_text:
+        raise ValueError("Texto para síntese de pronúncia não pode ser vazio.")
+
     audio_hash = generate_audio_hash(clean_text, voice)
     redis_key = f"latin_tts:audio:{audio_hash}"
     file_path = STORAGE_DIR / f"{audio_hash}.mp3"
+    import anyio.to_thread
 
     # 1. Check Redis Cache (Level 1)
     if redis_client:
@@ -79,74 +123,81 @@ async def get_or_create_latin_tts(
             cached_b64 = await redis_client.get(redis_key)
             if cached_b64:
                 audio_bytes = base64.b64decode(cached_b64)
-                logger.debug("TTS Cache HIT in Redis for hash %s", audio_hash)
-                return audio_bytes, audio_hash, cached_b64, True
+                if audio_bytes.startswith(b"RIFF") and settings.OPENAI_API_KEY:
+                    logger.info(
+                        "Found synthetic WAV in Redis for %s; reheating with genuine TTS.",
+                        audio_hash,
+                    )
+                else:
+                    logger.debug("TTS Cache HIT in Redis for hash %s", audio_hash)
+                    return audio_bytes, audio_hash, cached_b64, True
         except Exception as exc:
             logger.warning("Failed to read TTS from Redis cache: %s", exc)
 
     # 2. Check Local Disk Cache (Level 2)
     if file_path.exists():
         try:
-            import anyio.to_thread
-
             audio_bytes = await anyio.to_thread.run_sync(file_path.read_bytes)
-            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
-            logger.debug(
-                "TTS Cache HIT on Disk for hash %s. Reheating Redis.", audio_hash
-            )
+            if audio_bytes.startswith(b"RIFF") and settings.OPENAI_API_KEY:
+                logger.info(
+                    "Found synthetic WAV on disk for %s; reheating with genuine TTS.",
+                    audio_hash,
+                )
+            else:
+                audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+                logger.debug(
+                    "TTS Cache HIT on Disk for hash %s. Reheating Redis.", audio_hash
+                )
 
-            if redis_client:
-                try:
-                    await redis_client.set(redis_key, audio_b64, ex=REDIS_TTL_SECONDS)
-                except Exception as exc:
-                    logger.warning("Failed to reheat Redis TTS cache: %s", exc)
+                if redis_client:
+                    try:
+                        await redis_client.set(
+                            redis_key, audio_b64, ex=REDIS_TTL_SECONDS
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to reheat Redis TTS cache: %s", exc)
 
-            return audio_bytes, audio_hash, audio_b64, False
+                return audio_bytes, audio_hash, audio_b64, True
         except Exception as exc:
             logger.warning("Failed to read audio from disk (%s): %s", file_path, exc)
 
     # 3. Generate Audio (Level 3 - Provider or Fallback)
-    import anyio.to_thread
-
     generated_bytes: bytes
+    is_synthetic = False
     if settings.OPENAI_API_KEY:
         try:
-            from openai import AsyncOpenAI
-
-            client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            response = await client.audio.speech.create(
-                model="tts-1",
-                voice=voice,
-                input=clean_text,
-            )
-            generated_bytes = response.content
+            generated_bytes = await _call_openai_tts_with_retry(clean_text, voice)
             logger.info(
                 "Generated OpenAI TTS audio for '%s' (%s)", clean_text, audio_hash
             )
         except Exception as exc:
             logger.warning(
-                "OpenAI TTS API failed (%s). Falling back to synthetic audio.", exc
+                "OpenAI TTS API failed after retries (%s). Falling back to synthetic audio.",
+                exc,
             )
             generated_bytes = await anyio.to_thread.run_sync(
                 _generate_synthetic_fallback_audio, clean_text
             )
+            is_synthetic = True
     else:
         logger.info("No OpenAI API key. Using deterministic synthetic Latin audio.")
         generated_bytes = await anyio.to_thread.run_sync(
             _generate_synthetic_fallback_audio, clean_text
         )
+        is_synthetic = True
 
-    # 4. Save to Disk Cache
+    # 4. Save to Disk Cache & Redis Cache (Persist both genuine and synthetic to guarantee valid URLs)
+    audio_b64 = base64.b64encode(generated_bytes).decode("ascii")
     try:
         await anyio.to_thread.run_sync(file_path.write_bytes, generated_bytes)
     except Exception as exc:
         logger.warning("Failed to save audio to disk (%s): %s", file_path, exc)
 
-    # 5. Save to Redis Cache
-    audio_b64 = base64.b64encode(generated_bytes).decode("ascii")
     if redis_client:
         try:
-            await redis_client.set(redis_key, audio_b64, ex=REDIS_TTL_SECONDS)
+            # Synthetic audio is cached with a shorter TTL (1 hour) to allow eventual reheating
+            ttl = 3600 if is_synthetic else REDIS_TTL_SECONDS
+            await redis_client.set(redis_key, audio_b64, ex=ttl)
         except Exception as exc:
             logger.warning("Failed to save TTS to Redis cache: %s", exc)
 

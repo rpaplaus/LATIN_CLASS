@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { CourseModule, UserProgress } from '../types/progress';
+import { CompletedLessonSummary, CourseModule, UserProgress } from '../types/progress';
 import { LessonContent } from '../types/lesson';
 import {
   ExerciseEvaluationRequest,
@@ -9,6 +9,16 @@ import {
 export const lessonApi = {
   getModules: async (): Promise<CourseModule[]> => {
     const response = await apiClient.get<CourseModule[]>('/lessons/modules');
+    return response.data;
+  },
+
+  getHistory: async (): Promise<CompletedLessonSummary[]> => {
+    const response = await apiClient.get<CompletedLessonSummary[]>('/lessons/history');
+    return response.data;
+  },
+
+  getLessonById: async (lessonId: string): Promise<LessonContent> => {
+    const response = await apiClient.get<LessonContent>(`/lessons/${lessonId}`);
     return response.data;
   },
 

@@ -17,17 +17,30 @@ import {
   Sparkles,
   ArrowRight,
   Check,
-  Cpu,
   Feather,
   Layers,
+  Mic,
 } from 'lucide-react';
 import { LatinAudioButton } from '../components/common/LatinAudioButton';
 import { FlashcardModal } from '../components/flashcards/FlashcardModal';
+import { PronunciationLabModal } from '../components/pronunciation/PronunciationLabModal';
+import { HistoricalTriviaCard } from '../components/trivia/HistoricalTriviaCard';
+import { MagisterChatDrawer } from '../components/chat/MagisterChatDrawer';
+import { FloatingMagisterButton } from '../components/chat/FloatingMagisterButton';
 import { flashcardApi } from '../api/flashcardApi';
 import { FlashcardItem } from '../types/flashcard';
+import { LessonContent } from '../types/lesson';
+import {
+  ExerciseHeader,
+  getSafeQuestionPrompt,
+  getSafeInstruction,
+} from '../components/classroom/ExerciseCard';
 
 interface ClassroomPageProps {
   onBackToDashboard: () => void;
+  isReadOnly?: boolean;
+  reviewLesson?: LessonContent | null;
+  onBackToTabularium?: () => void;
 }
 
 interface AnswerRecord {
@@ -37,8 +50,14 @@ interface AnswerRecord {
   evaluation?: ExerciseEvaluationResponse;
 }
 
-export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard }) => {
-  const { activeLesson, completeLesson, isLoading } = useProgress();
+export const ClassroomPage: React.FC<ClassroomPageProps> = ({
+  onBackToDashboard,
+  isReadOnly = false,
+  reviewLesson = null,
+  onBackToTabularium,
+}) => {
+  const { activeLesson: contextLesson, completeLesson, isLoading } = useProgress();
+  const activeLesson = reviewLesson || contextLesson;
   const [activeTab, setActiveTab] = useState<'theory' | 'vocabulary' | 'exercises'>('theory');
 
   // Exercise runner states
@@ -48,6 +67,22 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
   const [isFlashcardsOpen, setIsFlashcardsOpen] = useState<boolean>(false);
   const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
   const [isLoadingFlashcards, setIsLoadingFlashcards] = useState<boolean>(false);
+
+  // Pronunciation Lab states
+  const [isPronunciationOpen, setIsPronunciationOpen] = useState<boolean>(false);
+  const [pronunciationText, setPronunciationText] = useState<string>('');
+  const [pronunciationTranslation, setPronunciationTranslation] = useState<string | undefined>(undefined);
+  const [pronunciationHint, setPronunciationHint] = useState<string | undefined>(undefined);
+
+  const handleOpenPronunciation = (text: string, translation?: string, hint?: string) => {
+    setPronunciationText(text);
+    setPronunciationTranslation(translation);
+    setPronunciationHint(hint);
+    setIsPronunciationOpen(true);
+  };
+
+  // Magister Interactive Chat states
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
   const handleOpenFlashcards = async () => {
     if (!activeLesson) return;
@@ -78,13 +113,15 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
           🏛️
         </div>
         <h3 className="font-serif text-xl font-bold text-slate-800">
-          Nenhuma lição ativa no momento
+          {isReadOnly ? 'Nenhuma lição selecionada para revisão' : 'Nenhuma lição ativa no momento'}
         </h3>
         <p className="text-stone-500 text-sm max-w-sm mx-auto">
-          Retorne ao painel para iniciar uma aula personalizada preparada pelo Magister Latium.
+          {isReadOnly
+            ? 'Retorne ao Tabularium para selecionar um pergaminho arquivado.'
+            : 'Retorne ao painel para iniciar uma aula personalizada preparada pelo Magister Latium.'}
         </p>
-        <Button variant="primary" onClick={onBackToDashboard}>
-          Voltar ao Painel
+        <Button variant="primary" onClick={onBackToTabularium || onBackToDashboard}>
+          {isReadOnly ? 'Voltar ao Tabularium' : 'Voltar ao Painel'}
         </Button>
       </div>
     );
@@ -93,13 +130,21 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
   const exercises = activeLesson.exercises || [];
   const currentEx = exercises[currentExIndex];
 
-  const handleCheckAnswer = async () => {
-    if (!currentEx) return;
+  const normalizeAnswer = (str: string) =>
+    str
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
 
-    // 1. Multiple choice question: Instant validation
+  const handleCheckAnswer = async () => {
+    // Strict Guard: Never trigger evaluations or LLM calls in Read-Only Mode
+    if (isReadOnly || !currentEx) return;
+
+    // 1. Multiple choice question: Instant validation (case & accent-insensitive)
     if (currentEx.options && currentEx.options.length > 0) {
       const isCorrect =
-        selectedOption.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
+        normalizeAnswer(selectedOption) === normalizeAnswer(currentEx.correct_answer);
       setUserAnswers((prev) => ({
         ...prev,
         [currentExIndex]: {
@@ -136,9 +181,9 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
       setIsAnswerChecked(true);
     } catch (err) {
       console.error('Erro na avaliação com Censor Latium:', err);
-      // Fallback comparison
+      // Fallback comparison (case & accent-tolerant)
       const isCorrect =
-        textAnswer.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
+        normalizeAnswer(textAnswer) === normalizeAnswer(currentEx.correct_answer);
       setUserAnswers((prev) => ({
         ...prev,
         [currentExIndex]: {
@@ -185,9 +230,9 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
         <div className="flex items-center gap-3">
           <button
-            onClick={onBackToDashboard}
+            onClick={onBackToTabularium || onBackToDashboard}
             className="p-2 rounded-xl hover:bg-stone-200/60 text-stone-600 transition-colors"
-            title="Voltar ao Painel"
+            title={isReadOnly ? 'Voltar ao Tabularium' : 'Voltar ao Painel'}
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -196,9 +241,16 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
               <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
                 {activeLesson.module_title}
               </span>
+              {isReadOnly && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 border border-amber-300/80 text-amber-900 uppercase tracking-wider">
+                  Revisão Histórica
+                </span>
+              )}
             </div>
             <h2 className="font-serif text-xl sm:text-2xl font-bold text-slate-900 leading-tight">
-              {activeLesson.lesson_title}
+              {activeTab === 'exercises'
+                ? activeLesson.lesson_title.replace(/\s*\([^)]*(?:est|sunt|sum|esse|-am|-ae|-us|-i)[^)]*\)/gi, '')
+                : activeLesson.lesson_title}
             </h2>
           </div>
         </div>
@@ -240,6 +292,33 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
           </button>
         </div>
       </div>
+
+      {/* Tabularium Read-Only Banner */}
+      {isReadOnly && (
+        <div className="bg-amber-500/10 border border-amber-600/30 text-amber-950 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center flex-shrink-0">
+              <Scroll className="w-5 h-5 text-amber-800" />
+            </div>
+            <div>
+              <h4 className="font-serif font-bold text-sm text-slate-900">
+                🏛️ Modo de Revisão Histórica (Tabularium)
+              </h4>
+              <p className="text-xs text-stone-600 mt-0.5">
+                Você está revisando esta aula com o gabarito oficial liberado. O Censor Latium está desativado (Custo Zero de IA).
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onBackToTabularium || onBackToDashboard}
+            className="self-start sm:self-auto text-xs flex-shrink-0"
+          >
+            Voltar ao Tabularium
+          </Button>
+        </div>
+      )}
 
       {/* TAB 1: TEORIA & HISTÓRIA */}
       {activeTab === 'theory' && (
@@ -296,6 +375,25 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                 {activeLesson.historical_context}
               </p>
             </Card>
+          )}
+
+          {/* Historical Trivia ("Você Sabia?") Microlearning Cards */}
+          {activeLesson.historical_trivia && activeLesson.historical_trivia.length > 0 ? (
+            <div className="space-y-4">
+              {activeLesson.historical_trivia.map((trivia, tIdx) => (
+                <HistoricalTriviaCard key={tIdx} trivia={trivia} />
+              ))}
+            </div>
+          ) : (
+            <HistoricalTriviaCard
+              trivia={{
+                title: 'A Pronúncia Viva no Fórum e os Sons de Roma',
+                content:
+                  'Na Roma republicana e imperial clássica (Pronuntiatio Restituta), a consoante "C" possuía som oclusivo velar /k/ universalmente — Cícero era chamado de "Kíkero" e César de "Káissar". A consoante "V" soava como a semivogal /w/ (como em "água"), fazendo com que a famosa frase "Veni, vidi, vici" ressoasse como "Uéni, uídi, uíki".',
+                century_or_period: 'Século I a.C.',
+                source_reference: 'Quintiliano, Institutio Oratoria (I.7) & Cícero, De Oratore',
+              }}
+            />
           )}
 
           {/* Teacher Tip */}
@@ -374,6 +472,20 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                           {item.word}
                         </h4>
                         <LatinAudioButton text={item.word} size="sm" />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenPronunciation(
+                              item.word,
+                              item.translation,
+                              item.example_sentence
+                            )
+                          }
+                          className="p-1.5 rounded-full text-amber-700 hover:bg-amber-100 transition-colors"
+                          title="Treinar pronúncia deste vocábulo no Laboratório"
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
                       </div>
                       <p className="text-xs text-stone-500 italic font-serif">
                         {item.dictionary_entry}
@@ -390,7 +502,22 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                     {item.example_sentence && (
                       <div className="flex items-center justify-between mt-1 text-xs text-stone-500 italic">
                         <span>"{item.example_sentence}"</span>
-                        <LatinAudioButton text={item.example_sentence} size="sm" />
+                        <div className="flex items-center space-x-1 flex-shrink-0">
+                          <LatinAudioButton text={item.example_sentence} size="sm" />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenPronunciation(
+                                item.example_sentence,
+                                item.translation
+                              )
+                            }
+                            className="p-1 rounded-full text-amber-700 hover:bg-amber-100 transition-colors"
+                            title="Treinar pronúncia desta frase no Laboratório"
+                          >
+                            <Mic className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -408,9 +535,28 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
               <div className="space-y-3">
                 {activeLesson.examples.map((ex, idx) => (
                   <Card key={idx} className="p-4 bg-[#faf8f4] border-stone-200">
-                    <p className="font-serif text-base font-semibold text-slate-900">
-                      {ex.latin}
-                    </p>
+                    <div className="flex items-start justify-between">
+                      <p className="font-serif text-base font-semibold text-slate-900">
+                        {ex.latin}
+                      </p>
+                      <div className="flex items-center space-x-1.5 ml-2 flex-shrink-0">
+                        <LatinAudioButton text={ex.latin} size="sm" />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleOpenPronunciation(
+                              ex.latin,
+                              ex.translation,
+                              ex.grammatical_notes
+                            )
+                          }
+                          className="p-1.5 rounded-full text-amber-700 hover:bg-amber-100 transition-colors"
+                          title="Treinar pronúncia no Laboratório"
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-sm text-stone-600 mt-1 font-medium">
                       ↳ {ex.translation}
                     </p>
@@ -445,47 +591,64 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
             /* Celebration / Lesson Finished Screen */
             <Card className="p-8 text-center max-w-lg mx-auto bg-gradient-to-b from-white to-amber-50/50 border-amber-200 shadow-xl space-y-6 animate-fadeIn">
               <div className="w-20 h-20 rounded-full bg-amber-100 border-2 border-amber-300 flex items-center justify-center mx-auto text-4xl shadow-inner">
-                🏆
+                {isReadOnly ? '📜' : '🏆'}
               </div>
 
               <div className="space-y-2">
                 <Badge variant="success" size="md">
-                  Lição Finalizada com Êxito!
+                  {isReadOnly ? 'Revisão Histórica Concluída' : 'Lição Finalizada com Êxito!'}
                 </Badge>
                 <h3 className="font-serif text-2xl font-bold text-slate-900">
-                  Optime Fecisti! (Muito Bem!)
+                  {isReadOnly ? 'Lectio Recognita!' : 'Optime Fecisti! (Muito Bem!)'}
                 </h3>
                 <p className="text-stone-600 text-sm">
-                  Você completou todos os exercícios propostos para esta lição.
+                  {isReadOnly
+                    ? 'Você concluiu a consulta completa de todos os exercícios e gabaritos deste pergaminho.'
+                    : 'Você completou todos os exercícios propostos para esta lição.'}
                 </p>
               </div>
 
-              {/* Score Display */}
-              <div className="p-4 rounded-xl bg-white border border-stone-200/80 shadow-sm max-w-xs mx-auto">
-                <p className="text-xs uppercase font-bold tracking-wider text-stone-400">
-                  Pontuação Conquistada
-                </p>
-                <div className="flex items-center justify-center gap-1.5 mt-1">
-                  <Award className="w-6 h-6 text-amber-600" />
-                  <span className="font-bold text-3xl text-slate-900">
-                    {calculateFinalScore()}
-                  </span>
-                  <span className="text-stone-400 text-sm">/ 100</span>
+              {/* Score Display (only for normal mode) */}
+              {!isReadOnly && (
+                <div className="p-4 rounded-xl bg-white border border-stone-200/80 shadow-sm max-w-xs mx-auto">
+                  <p className="text-xs uppercase font-bold tracking-wider text-stone-400">
+                    Pontuação Conquistada
+                  </p>
+                  <div className="flex items-center justify-center gap-1.5 mt-1">
+                    <Award className="w-6 h-6 text-amber-600" />
+                    <span className="font-bold text-3xl text-slate-900">
+                      {calculateFinalScore()}
+                    </span>
+                    <span className="text-stone-400 text-sm">/ 100</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="pt-2">
-                <Button
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  onClick={handleFinishAndSave}
-                  isLoading={isLoading}
-                  className="shadow-lg"
-                >
-                  <Check className="w-5 h-5 mr-1.5" />
-                  Salvar Progresso e Concluir
-                </Button>
+                {isReadOnly ? (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={onBackToTabularium || onBackToDashboard}
+                    className="shadow-lg"
+                  >
+                    <Scroll className="w-5 h-5 mr-1.5" />
+                    Retornar ao Tabularium
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    fullWidth
+                    onClick={handleFinishAndSave}
+                    isLoading={isLoading}
+                    className="shadow-lg"
+                  >
+                    <Check className="w-5 h-5 mr-1.5" />
+                    Salvar Progresso e Concluir
+                  </Button>
+                )}
               </div>
             </Card>
           ) : currentEx ? (
@@ -521,22 +684,19 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
 
               {/* Exercise Question Card */}
               <Card className="p-6 sm:p-8 border-stone-200 space-y-5 shadow-sm">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="neutral" size="sm">
-                      {currentEx.instruction || 'Responda a pergunta'}
-                    </Badge>
-                    {!currentEx.options && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                        <Cpu className="w-3 h-3 text-amber-600" />
-                        Correção com IA (Censor Latium)
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 mt-2">
-                    {currentEx.question}
-                  </h3>
-                </div>
+                <ExerciseHeader
+                  instruction={getSafeInstruction(
+                    currentEx.instruction,
+                    currentEx.correct_answer,
+                    isAnswerChecked
+                  )}
+                  question_prompt={getSafeQuestionPrompt(
+                    currentEx.question,
+                    currentEx.correct_answer,
+                    isAnswerChecked
+                  )}
+                  isAiEvaluated={!currentEx.options}
+                />
 
                 {/* Multiple Choice Options */}
                 {currentEx.options && currentEx.options.length > 0 ? (
@@ -544,42 +704,96 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                     {currentEx.options.map((opt, optIdx) => {
                       const isSelected = selectedOption === opt;
                       const isCorrectAnswer =
-                        opt.trim().toLowerCase() === currentEx.correct_answer.trim().toLowerCase();
+                        normalizeAnswer(opt) === normalizeAnswer(currentEx.correct_answer);
 
                       let optionStyle =
                         'border-stone-200 hover:border-stone-300 bg-white text-stone-800';
 
-                      if (isSelected && !isAnswerChecked) {
-                        optionStyle = 'border-amber-600 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20';
-                      }
-
-                      if (isAnswerChecked) {
+                      if (isReadOnly) {
                         if (isCorrectAnswer) {
-                          optionStyle = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium';
-                        } else if (isSelected && !isCorrectAnswer) {
-                          optionStyle = 'border-red-400 bg-red-50 text-red-900';
+                          optionStyle =
+                            'border-emerald-500 bg-emerald-50 text-emerald-950 font-medium ring-1 ring-emerald-400';
                         } else {
-                          optionStyle = 'opacity-50 border-stone-200 bg-stone-50';
+                          optionStyle = 'opacity-60 border-stone-200 bg-stone-50 text-stone-600';
+                        }
+                      } else {
+                        if (isSelected && !isAnswerChecked) {
+                          optionStyle =
+                            'border-amber-600 bg-amber-50/50 text-amber-900 ring-2 ring-amber-500/20';
+                        }
+
+                        if (isAnswerChecked) {
+                          if (isCorrectAnswer) {
+                            optionStyle =
+                              'border-emerald-500 bg-emerald-50 text-emerald-900 font-medium';
+                          } else if (isSelected && !isCorrectAnswer) {
+                            optionStyle = 'border-red-400 bg-red-50 text-red-900';
+                          } else {
+                            optionStyle = 'opacity-50 border-stone-200 bg-stone-50';
+                          }
                         }
                       }
 
                       return (
                         <button
                           key={optIdx}
-                          disabled={isAnswerChecked}
+                          disabled={isReadOnly || isAnswerChecked}
                           onClick={() => setSelectedOption(opt)}
                           className={`w-full p-3.5 rounded-xl border text-left text-sm sm:text-base flex items-center justify-between transition-all ${optionStyle}`}
                         >
                           <span className="font-serif">{opt}</span>
-                          {isAnswerChecked && isCorrectAnswer && (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 ml-2" />
+                          {((isReadOnly && isCorrectAnswer) ||
+                            (isAnswerChecked && isCorrectAnswer)) && (
+                            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                              {isReadOnly && (
+                                <span className="text-[10px] uppercase font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                                  Gabarito
+                                </span>
+                              )}
+                              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                            </div>
                           )}
-                          {isAnswerChecked && isSelected && !isCorrectAnswer && (
+                          {!isReadOnly && isAnswerChecked && isSelected && !isCorrectAnswer && (
                             <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 ml-2" />
                           )}
                         </button>
                       );
                     })}
+
+                    {isReadOnly && currentEx.explanation && (
+                      <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-700 leading-relaxed mt-3">
+                        <span className="font-bold text-slate-900 font-serif">
+                          Explicação Gramatical:{' '}
+                        </span>
+                        {currentEx.explanation}
+                      </div>
+                    )}
+                  </div>
+                ) : isReadOnly ? (
+                  /* Read-Only Mode for open-ended / translation questions: Strictly omit input & evaluate button, reveal canonical answer */
+                  <div className="p-5 rounded-xl bg-emerald-50/90 border border-emerald-300 space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        <span className="font-serif font-bold text-sm text-emerald-950">
+                          Gabarito Clássico (Resposta Esperada):
+                        </span>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-800 bg-emerald-200/70 px-2.5 py-0.5 rounded-full">
+                        Alvo Oficial
+                      </span>
+                    </div>
+                    <p className="font-serif text-base sm:text-lg font-bold text-emerald-900 pl-7">
+                      {currentEx.correct_answer}
+                    </p>
+                    {currentEx.explanation && (
+                      <div className="pl-7 pt-2.5 text-xs sm:text-sm text-emerald-800 leading-relaxed border-t border-emerald-200/70 mt-2">
+                        <span className="font-semibold text-emerald-950">
+                          Explicação do Magister:{' '}
+                        </span>
+                        {currentEx.explanation}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   /* Text input for fill in the blank / translation */
@@ -590,7 +804,11 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                       onChange={(e) => setTextAnswer(e.target.value)}
                       disabled={isAnswerChecked || isEvaluating}
                       placeholder="Digite sua resposta em latim ou português..."
-                      className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 text-sm font-serif"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck="false"
+                      className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 text-sm font-sans text-stone-900 bg-white placeholder:text-stone-400 normal-case transition-all"
                     />
                   </div>
                 )}
@@ -729,30 +947,71 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
                 )}
 
                 {/* Action buttons */}
-                <div className="pt-2 flex justify-end">
-                  {!isAnswerChecked ? (
-                    <Button
-                      variant="primary"
-                      onClick={handleCheckAnswer}
-                      disabled={(!selectedOption && !textAnswer.trim()) || isEvaluating}
-                      isLoading={isEvaluating}
-                    >
-                      {!currentEx.options ? 'Avaliar com Censor Latium' : 'Verificar Resposta'}
-                    </Button>
-                  ) : (
-                    <Button variant="primary" onClick={handleNextExercise}>
-                      {currentExIndex < exercises.length - 1 ? (
-                        <>
-                          <span>Próxima Pergunta</span>
-                          <ArrowRight className="w-4 h-4 ml-1.5" />
-                        </>
+                <div className="pt-2 flex items-center justify-between gap-2">
+                  {isReadOnly ? (
+                    <>
+                      {currentExIndex > 0 ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setCurrentExIndex((prev) => prev - 1)}
+                        >
+                          <ArrowLeft className="w-4 h-4 mr-1" />
+                          <span>Pergunta Anterior</span>
+                        </Button>
                       ) : (
-                        <>
-                          <span>Finalizar Aula</span>
-                          <Check className="w-4 h-4 ml-1.5" />
-                        </>
+                        <div />
                       )}
-                    </Button>
+
+                      <div className="flex items-center gap-2">
+                        {currentExIndex < exercises.length - 1 ? (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => setCurrentExIndex((prev) => prev + 1)}
+                          >
+                            <span>Próxima Pergunta</span>
+                            <ArrowRight className="w-4 h-4 ml-1.5" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => setIsLessonFinished(true)}
+                          >
+                            <Check className="w-4 h-4 mr-1.5" />
+                            <span>Concluir Revisão</span>
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  ) : !isAnswerChecked ? (
+                    <div className="w-full flex justify-end">
+                      <Button
+                        variant="primary"
+                        onClick={handleCheckAnswer}
+                        disabled={(!selectedOption && !textAnswer.trim()) || isEvaluating}
+                        isLoading={isEvaluating}
+                      >
+                        {!currentEx.options ? 'Avaliar com Censor Latium' : 'Verificar Resposta'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="w-full flex justify-end">
+                      <Button variant="primary" onClick={handleNextExercise}>
+                        {currentExIndex < exercises.length - 1 ? (
+                          <>
+                            <span>Próxima Pergunta</span>
+                            <ArrowRight className="w-4 h-4 ml-1.5" />
+                          </>
+                        ) : (
+                          <>
+                            <span>Finalizar Aula</span>
+                            <Check className="w-4 h-4 ml-1.5" />
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </Card>
@@ -763,8 +1022,12 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
               <p className="text-stone-500 text-sm">
                 Esta lição é puramente teórica e não possui exercícios interativos.
               </p>
-              <Button variant="primary" onClick={handleFinishAndSave} isLoading={isLoading}>
-                Concluir e Salvar Estudo
+              <Button
+                variant="primary"
+                onClick={isReadOnly ? (onBackToTabularium || onBackToDashboard) : handleFinishAndSave}
+                isLoading={!isReadOnly && isLoading}
+              >
+                {isReadOnly ? 'Retornar ao Tabularium' : 'Concluir e Salvar Estudo'}
               </Button>
             </div>
           )}
@@ -778,6 +1041,32 @@ export const ClassroomPage: React.FC<ClassroomPageProps> = ({ onBackToDashboard 
           onClose={() => setIsFlashcardsOpen(false)}
           flashcards={flashcards}
           lessonTitle={activeLesson.lesson_title}
+        />
+      )}
+
+      {/* Laboratório de Pronúncia Modal */}
+      <PronunciationLabModal
+        isOpen={isPronunciationOpen}
+        onClose={() => setIsPronunciationOpen(false)}
+        targetText={pronunciationText}
+        translation={pronunciationTranslation}
+        phoneticHint={pronunciationHint}
+      />
+
+      {/* Magister Latium Side-Drawer Chat */}
+      <MagisterChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        lessonId={activeLesson?.lesson_id}
+        lessonTitle={activeLesson?.lesson_title}
+        contextTopics={activeLesson?.theory_sections?.map((t) => t.topic) || []}
+      />
+
+      {/* Floating Action Button for Magister Chat (Disabled in Read-Only) */}
+      {!isReadOnly && (
+        <FloatingMagisterButton
+          isOpen={isChatOpen}
+          onClick={() => setIsChatOpen(true)}
         />
       )}
     </div>
