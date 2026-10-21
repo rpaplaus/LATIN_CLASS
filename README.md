@@ -75,7 +75,7 @@ flowchart TD
     end
 
     subgraph Gateway ["Nginx / Reverse Proxy / Docker Ports"]
-        P3000["Frontend: http://localhost:3000 (Vite)"]
+        P3001["Frontend: http://localhost:3001 (Vite)"]
         P8001["Backend API: http://localhost:8001 (FastAPI)"]
     end
 
@@ -221,8 +221,8 @@ docker compose exec backend python scripts/ingest_corpus.py
 ```
 
 #### URLs e Portas de Acesso:
-- 🏛️ **Frontend (Aplicação Web):** [http://localhost:3000](http://localhost:3000)
-- ⚙️ **Backend API:** [http://localhost:8001](http://localhost:8001) (e porta espelhada `8000`)
+- 🏛️ **Frontend (Aplicação Web):** [http://localhost:3001](http://localhost:3001) (ou `5174` em dev local)
+- ⚙️ **Backend API:** [http://localhost:8001](http://localhost:8001)
 - 📖 **Documentação Interativa (Swagger UI):** [http://localhost:8001/docs](http://localhost:8001/docs)
 - 📚 **Documentação Alternativa (ReDoc):** [http://localhost:8001/redoc](http://localhost:8001/redoc)
 - 🩺 **Healthcheck de Serviços:** [http://localhost:8001/api/v1/health](http://localhost:8001/api/v1/health)
@@ -256,7 +256,7 @@ cd backend
 alembic upgrade head
 
 # Iniciar o servidor de desenvolvimento com recarregamento automático
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 #### Passo C: Inicializar o Frontend (React / Vite)
@@ -266,7 +266,7 @@ cd frontend
 npm install
 npm run dev
 ```
-O frontend estará acessível em `http://localhost:5173` ou `http://localhost:3000`.
+O frontend estará acessível em `http://localhost:5174` ou `http://localhost:3001`.
 
 ---
 

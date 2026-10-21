@@ -12,7 +12,7 @@ services:
     volumes:
       - latium_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-latium_user} -d ${POSTGRES_DB:-latium_db}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-latium_user} -d ${POSTGRES_DB:-latium_db}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,7 +27,7 @@ services:
     volumes:
       - latium_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -45,8 +45,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "${BACKEND_PORT:-8001}:8000"
-      - "8000:8000"
+      - "${BACKEND_PORT:-8001}:8001"
     env_file:
       - .env
     environment:
@@ -64,7 +63,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_URL=redis://redis:6379/0
-      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8000","http://localhost:8001"]
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3001","http://127.0.0.1:3001","http://localhost:5174","http://127.0.0.1:5174","http://localhost:8001","http://127.0.0.1:8001","https://latin.dumai.com.br","http://latin.dumai.com.br"]}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -73,7 +72,7 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     volumes:
       - ./backend:/app
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload"
 
   frontend:
     build:
@@ -84,18 +83,18 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-3000}:5173"
+      - "${FRONTEND_PORT:-3001}:5174"
     image: latin_class-frontend:latest
     environment:
       - VITE_API_URL=/api/v1
+      - VITE_BACKEND_URL=http://backend:8001
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: npm run dev -- --host 0.0.0.0 --port 5173
+    command: npm run dev -- --host 0.0.0.0 --port 5174
 
 volumes:
   latium_postgres_data:
     external: true
   latium_redis_data:
     external: true
-

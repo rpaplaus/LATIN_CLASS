@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 def get_client_ip(request: Request) -> str:
     """Extract client IP address considering proxy headers."""
+    cf_connecting_ip = request.headers.get("CF-Connecting-IP")
+    if cf_connecting_ip:
+        return cf_connecting_ip.strip()
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
