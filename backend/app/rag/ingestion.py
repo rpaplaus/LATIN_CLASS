@@ -187,3 +187,20 @@ async def ingest_corpus_seed(db: AsyncSession) -> int:
         "Alexandria corpus seed completed: %d total chunks ingested", total_chunks
     )
     return total_chunks
+
+
+if __name__ == "__main__":
+    import asyncio
+    from app.core.database import async_session_factory
+
+    async def _main() -> None:
+        print("=============================================================")
+        print("[ALEXANDRIA] INGESTAO DA BIBLIOTECA DE ALEXANDRIA (RAG)")
+        print("=============================================================")
+        print("Conectando ao PostgreSQL e processando obras canonicas...")
+        async with async_session_factory() as session:
+            count = await ingest_corpus_seed(session)
+            print(f"[OK] Ingestao concluida com sucesso! Total de fragmentos indexados: {count}")
+
+    asyncio.run(_main())
+

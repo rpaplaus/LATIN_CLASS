@@ -1,5 +1,5 @@
 @echo off
-cd /d "C:\Users\rpapl\.gemini\antigravity-ide\scratch\LATIN_CLASS"
+cd /d "%~dp0"
 
 echo Subindo todos os containers do Latin Class em background...
 docker compose up -d

@@ -2,9 +2,16 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add backend directory to sys.path
-backend_path = Path(__file__).resolve().parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
+# Add backend directory or app root to sys.path (supports both host and container)
+current_dir = Path(__file__).resolve().parent
+candidates = [
+    current_dir.parent / "backend",  # Host root execution: <repo>/backend
+    current_dir.parent,              # Container execution: /app
+]
+for candidate in candidates:
+    if (candidate / "app").is_dir():
+        sys.path.insert(0, str(candidate))
+        break
 
 from app.core.database import async_session_factory
 from app.rag.ingestion import ingest_corpus_seed
